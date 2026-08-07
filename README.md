@@ -1,73 +1,114 @@
-# Welcome to your Lovable project
+# ☀️ SolarCad — Web CAD Interativo para Engenharia Fotovoltaica
 
-## Project info
+[![React](https://img.shields.io/badge/React-18.3-blue.svg?logo=react)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg?logo=typescript)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite-5.4-purple.svg?logo=vite)](https://vitejs.dev/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC.svg?logo=tailwind-css)](https://tailwindcss.com/)
+[![Supabase](https://img.shields.io/badge/Supabase-Database%20%26%20Auth-green.svg?logo=supabase)](https://supabase.com/)
+[![DevSecOps](https://img.shields.io/badge/DevSecOps-Audited%20%26%20Sanitized-brightgreen.svg)]()
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+**SolarCad** é uma aplicação Web CAD (Computer-Aided Design) desenvolvida para engenheiros e projetistas de sistemas solares fotovoltaicos. A plataforma permite a criação de esquemas elétricos unifilares e trifilares em tempo real, cálculos automatizados de dimensionamento de cabos e proteções, além da geração instantânea de memoriais descritivos de engenharia em PDF.
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## 🚀 Principais Funcionalidades
 
-**Use Lovable**
+- 📐 **Diagramação Canvas 2D Interativa**: Renderização e manipulação visual de componentes elétricos fotovoltaicos (módulos, strings, inversores, stringboxes, disjuntores, DPS e barramentos) sobre um Canvas HTML5.
+- ⚡ **Dimensionamento Elétrico Inteligente**:
+  - Cálculo de queda de tensão em Corrente Contínua (CC) e Corrente Alternada (CA).
+  - Seleção automática da bitola ideal de cabos ($mm^2$) segundo normas técnicas.
+  - Dimensionamento automático de disjuntores, fusíveis e dispositivos de proteção contra surtos (DPS).
+- 📋 **Gestão de Equipamentos Solar**: Cadastro e edição completa das especificações técnicas de painéis solares ($V_{oc}, I_{sc}, V_{mp}, I_{mp}$) e inversores.
+- 📄 **Geração de Memoriais Descritivos em PDF**: Exportação profissional de relatórios de engenharia com esquemas, especificações e tabelas detalhadas via `jsPDF`.
+- ☁️ **Sincronização em Nuvem (Supabase)**: Autenticação de usuários, persistência segura de projetos e histórico de edições com controle de acesso por linha (RLS).
+- 📲 **Suporte PWA (Progressive Web App)**: Funcionamento otimizado para uso em campo e instalações em tablets e dispositivos móveis.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+---
 
-Changes made via Lovable will be committed automatically to this repo.
+## 🛠️ Stack Tecnológica
 
-**Use your preferred IDE**
+### **Frontend & Interface**
+- **Core:** React 18 + TypeScript
+- **Bundler & Build Tool:** Vite
+- **Estilização:** Tailwind CSS + Radix UI (shadcn/ui) + Lucide React (Ícones)
+- **Visualização & Gráficos:** Canvas HTML5 2D API + Recharts
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### **Engine de Documentos & Dados**
+- **PDF Export:** `jsPDF` + `jspdf-autotable`
+- **Formulários & Validação:** React Hook Form + Zod
+- **Gerenciamento de Estado & Cache:** TanStack React Query
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### **Backend & Infraestrutura**
+- **Banco de Dados & Autenticação:** Supabase PostgreSQL + Supabase Auth UI
+- **PWA:** `vite-plugin-pwa`
 
-Follow these steps:
+---
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+## ⚙️ Configuração de Variáveis de Ambiente (`.env`)
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+Para executar a aplicação localmente, crie um arquivo `.env` na raiz do projeto com base no modelo fornecido no `.env.example`:
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```env
+# Supabase Configuration
+VITE_SUPABASE_URL=https://sua-instancia.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sua_chave_publica_anonima_aqui
+VITE_SUPABASE_PROJECT_ID=seu_project_id_aqui
 ```
 
-**Edit a file directly in GitHub**
+> 🛡️ **DevSecOps Note:** O arquivo `.env` contendo credenciais reais está estritamente bloqueado no `.gitignore` e nunca deve ser enviado ao controle de versão.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+---
 
-**Use GitHub Codespaces**
+## 💻 Guia de Execução Local
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Pré-requisitos
+- **Node.js** v18 ou superior
+- Gerenciador de pacotes: **npm**, **pnpm** ou **bun**
 
-## What technologies are used for this project?
+### Passo a Passo
 
-This project is built with:
+1. **Clonar o Repositório:**
+   ```bash
+   git clone https://github.com/lucasantannaeng/SolarCad.git
+   cd SolarCad
+   ```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+2. **Instalar Dependências:**
+   ```bash
+   npm install
+   # ou
+   bun install
+   ```
 
-## How can I deploy this project?
+3. **Configurar as Variáveis de Ambiente:**
+   ```bash
+   cp .env.example .env
+   # Edite o arquivo .env preenchendo as credenciais do seu projeto Supabase
+   ```
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+4. **Iniciar o Servidor de Desenvolvimento:**
+   ```bash
+   npm run dev
+   # ou
+   bun dev
+   ```
+   Acesse no navegador: `http://localhost:8080` (ou porta informada no terminal).
 
-## Can I connect a custom domain to my Lovable project?
+---
 
-Yes, you can!
+## 📜 Scripts Disponíveis
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+- `npm run dev`: Inicia o servidor de desenvolvimento Vite.
+- `npm run build`: Compila e gera os artefatos otimizados de produção na pasta `dist/`.
+- `npm run preview`: Executa a visualização da versão compilada de produção.
+- `npm run lint`: Executa a verificação estática do código com ESLint.
+- `npm run test`: Executa os testes unitários utilizando Vitest.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+---
+
+## 🔒 Conformidade DevSecOps
+
+Este repositório passa por auditorias continuadas de segurança:
+- Zero credenciais, tokens JWT ou senhas em hardcode no código-fonte.
+- Bloqueio completo de artefatos temporários, `.env` e `node_modules` no `.gitignore`.
+- Versionamento limpo seguindo as diretrizes recomendadas pela OWASP.
