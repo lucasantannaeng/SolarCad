@@ -1,0 +1,24 @@
+{
+  "name": "SolarCad - Projetos Fotovoltaicos",
+  "short_name": "SolarCad",
+  "description": "Ferramenta CAD profissional para diagramas unifilares e memoriais descritivos fotovoltaicos. Por LS Engenharia.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#f59e0b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-solarcad.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

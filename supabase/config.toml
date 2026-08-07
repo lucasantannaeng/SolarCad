@@ -1,0 +1,10 @@
+project_id = "rjppcterrcbekbspqqmi"
+
+[functions.ocr-energy-bill]
+verify_jwt = false
+
+[functions.optimize-strings]
+verify_jwt = false
+
+[functions.generate-justification]
+verify_jwt = false
