@@ -1,11 +1,12 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ProjectState } from '@/types';
 import { getProjectEngineeringStatus, getBlockEngineeringStatus } from '@/services/engineering';
 import { getCableForCurrent, getPhases } from '@/components/diagram/cableCalculations';
+import { generateSolarUnifilarDxf, downloadDxfFile } from '@/services/dxfExporter';
 import { jsPDF } from 'jspdf';
 import { Button } from '@/components/ui/button';
 import { InfoTrigger } from '@/components/InfoTrigger';
-import { Download, Image } from 'lucide-react';
+import { Download, Image, ZoomIn, ZoomOut, RotateCcw, FileText } from 'lucide-react';
 
 interface Props {
   projectData: ProjectState;
@@ -865,6 +866,14 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
     pdf.save(`Diagrama_${projectData.client.name.replace(/\s+/g, '_') || 'projeto'}.pdf`);
   };
 
+  const [zoom, setZoom] = useState<number>(1.0);
+
+  const handleDownloadDXF = () => {
+    const dxfContent = generateSolarUnifilarDxf(projectData);
+    const filename = `Diagrama_${projectData.client.name.replace(/\s+/g, '_') || 'projeto'}.dxf`;
+    downloadDxfFile(filename, dxfContent);
+  };
+
   const handleDownloadPNG = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -876,27 +885,72 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
 
   return (
     <div className="flex flex-col items-center w-full">
-      <div className="w-full flex justify-between items-center mb-4">
+      <div className="w-full flex flex-wrap justify-between items-center gap-2 mb-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-muted-foreground">Diagrama Unifilar</span>
+          <span className="text-sm font-medium text-muted-foreground">Diagrama Unifilar Interativo</span>
           <InfoTrigger helpKey="diagram" />
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleDownloadPNG} className="gap-2">
-            <Image size={16} /> Baixar PNG
+
+        {/* Controles de Zoom & Ações de Exportação */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center bg-background border border-border rounded-lg p-0.5 shadow-sm">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setZoom(z => Math.max(0.5, Math.round((z - 0.15) * 100) / 100))}
+              title="Diminuir Zoom"
+            >
+              <ZoomOut size={14} />
+            </Button>
+            <span className="text-xs font-mono px-2 text-muted-foreground">{Math.round(zoom * 100)}%</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setZoom(z => Math.min(2.5, Math.round((z + 0.15) * 100) / 100))}
+              title="Aumentar Zoom"
+            >
+              <ZoomIn size={14} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-muted-foreground"
+              onClick={() => setZoom(1.0)}
+              title="Resetar Zoom"
+            >
+              <RotateCcw size={12} />
+            </Button>
+          </div>
+
+          <Button variant="outline" size="sm" onClick={handleDownloadDXF} className="gap-1.5 border-emerald-600/40 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40" title="Exportar para AutoCAD (DXF R12/R2000)">
+            <FileText size={15} /> Exportar DXF
           </Button>
-          <Button size="sm" onClick={handleDownloadPDF} className="gap-2 bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-            <Download size={16} /> Baixar PDF
+
+          <Button variant="outline" size="sm" onClick={handleDownloadPNG} className="gap-1.5">
+            <Image size={15} /> Baixar PNG
+          </Button>
+
+          <Button size="sm" onClick={handleDownloadPDF} className="gap-1.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+            <Download size={15} /> Baixar PDF
           </Button>
         </div>
       </div>
-      <div className="w-full overflow-auto bg-muted p-4 rounded-lg border border-border flex justify-center">
-        <canvas
-          ref={canvasRef}
-          className="bg-white shadow-lg max-w-full h-auto"
-          style={{ maxHeight: '600px', imageRendering: 'crisp-edges' }}
-        />
+
+      <div className="w-full overflow-auto bg-muted p-4 rounded-lg border border-border flex justify-center min-h-[420px]">
+        <div 
+          className="transition-transform duration-150 origin-top flex justify-center items-center"
+          style={{ transform: `scale(${zoom})` }}
+        >
+          <canvas
+            ref={canvasRef}
+            className="bg-white shadow-xl max-w-full h-auto rounded"
+            style={{ maxHeight: '600px', imageRendering: 'crisp-edges' }}
+          />
+        </div>
       </div>
     </div>
   );
 };
+
