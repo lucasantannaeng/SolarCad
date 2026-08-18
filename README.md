@@ -1,114 +1,119 @@
-# ☀️ SolarCad — Web CAD Interativo para Engenharia Fotovoltaica
+# ☀️ SolarCad — Interactive Web CAD for Photovoltaic Engineering
 
-[![React](https://img.shields.io/badge/React-18.3-blue.svg?logo=react)](https://reactjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg?logo=typescript)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite-5.4-purple.svg?logo=vite)](https://vitejs.dev/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC.svg?logo=tailwind-css)](https://tailwindcss.com/)
-[![Supabase](https://img.shields.io/badge/Supabase-Database%20%26%20Auth-green.svg?logo=supabase)](https://supabase.com/)
-[![DevSecOps](https://img.shields.io/badge/DevSecOps-Audited%20%26%20Sanitized-brightgreen.svg)]()
+[![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=black)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+[![Vitest](https://img.shields.io/badge/Vitest-Passing-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![AutoCAD DXF](https://img.shields.io/badge/AutoCAD-DXF%20R12%20Export-red.svg)]()
+[![NBR Standards](https://img.shields.io/badge/Standards-NBR%205410%20%7C%20NBR%2016690-blue.svg)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**SolarCad** é uma aplicação Web CAD (Computer-Aided Design) desenvolvida para engenheiros e projetistas de sistemas solares fotovoltaicos. A plataforma permite a criação de esquemas elétricos unifilares e trifilares em tempo real, cálculos automatizados de dimensionamento de cabos e proteções, além da geração instantânea de memoriais descritivos de engenharia em PDF.
-
----
-
-## 🚀 Principais Funcionalidades
-
-- 📐 **Diagramação Canvas 2D Interativa**: Renderização e manipulação visual de componentes elétricos fotovoltaicos (módulos, strings, inversores, stringboxes, disjuntores, DPS e barramentos) sobre um Canvas HTML5.
-- ⚡ **Dimensionamento Elétrico Inteligente**:
-  - Cálculo de queda de tensão em Corrente Contínua (CC) e Corrente Alternada (CA).
-  - Seleção automática da bitola ideal de cabos ($mm^2$) segundo normas técnicas.
-  - Dimensionamento automático de disjuntores, fusíveis e dispositivos de proteção contra surtos (DPS).
-- 📋 **Gestão de Equipamentos Solar**: Cadastro e edição completa das especificações técnicas de painéis solares ($V_{oc}, I_{sc}, V_{mp}, I_{mp}$) e inversores.
-- 📄 **Geração de Memoriais Descritivos em PDF**: Exportação profissional de relatórios de engenharia com esquemas, especificações e tabelas detalhadas via `jsPDF`.
-- ☁️ **Sincronização em Nuvem (Supabase)**: Autenticação de usuários, persistência segura de projetos e histórico de edições com controle de acesso por linha (RLS).
-- 📲 **Suporte PWA (Progressive Web App)**: Funcionamento otimizado para uso em campo e instalações em tablets e dispositivos móveis.
+> **Cloud-native Web CAD for Solar PV Single-Line Diagrams (SLD), regulatory compliance sizing (NBR 5410 & NBR 16690), interactive Pan/Zoom, and automated AutoCAD DXF / PDF export.**
 
 ---
 
-## 🛠️ Stack Tecnológica
+## 🌟 Overview
 
-### **Frontend & Interface**
-- **Core:** React 18 + TypeScript
-- **Bundler & Build Tool:** Vite
-- **Estilização:** Tailwind CSS + Radix UI (shadcn/ui) + Lucide React (Ícones)
-- **Visualização & Gráficos:** Canvas HTML5 2D API + Recharts
-
-### **Engine de Documentos & Dados**
-- **PDF Export:** `jsPDF` + `jspdf-autotable`
-- **Formulários & Validação:** React Hook Form + Zod
-- **Gerenciamento de Estado & Cache:** TanStack React Query
-
-### **Backend & Infraestrutura**
-- **Banco de Dados & Autenticação:** Supabase PostgreSQL + Supabase Auth UI
-- **PWA:** `vite-plugin-pwa`
+**SolarCad** is a purpose-built Computer-Aided Design (CAD) platform engineered for photovoltaic design engineers. It automates the generation of compliant Single-Line Diagrams (SLD), sizing calculations for DC/AC protection devices, conductor cross-sections, and utility approval documentation for Brazilian distribution companies (Enel, CPFL, Light, Cemig, Equatorial).
 
 ---
 
-## ⚙️ Configuração de Variáveis de Ambiente (`.env`)
+## 🚀 Key Features
 
-Para executar a aplicação localmente, crie um arquivo `.env` na raiz do projeto com base no modelo fornecido no `.env.example`:
+* 📐 **Interactive Canvas CAD Workspace (`DiagramCanvas.tsx`)**:
+  * Real-time 2D rendering of PV modules, string arrays, central/micro-inverters, stringboxes, AC distribution boards, and utility meter connection points.
+  * **Interactive Pan & Zoom (50% to 250%)**: Smooth navigation, zoom controls, and instant 100% canvas reset.
+  * Line weight hierarchy adhering to technical drawing standards (Power conductors `0.55mm`, Symbols `0.30mm`, Border `0.40mm`).
+* ⚡ **Automated Engineering Calculations (`engineering.ts`)**:
+  * **Conductor Sizing & Ampacity:** Automatic cross-section determination ($mm^2$) based on current capacity and thermal correction factors.
+  * **Circuit Breakers (NBR 5410):** Sizing curves ($1.25\times I_n$) with standard commercial ratings (40A, 50A, 63A, 70A, etc.) and polarity detection (Bipolar/Tripolar).
+  * **DC Voltage & Thermal Limits (NBR 16690):** String $V_{oc}$ calculation with low-temperature safety factor ($1.15\times$) against inverter maximum DC input voltage.
+* 📄 **Multi-Format Export Engine**:
+  * **AutoCAD DXF (R12/R2000):** Vector export with structured layers (`FRAME`, `EQUIPMENT`, `POWER`, `DC_CABLE`, `TEXT`) ready for direct import into AutoCAD.
+  * **Print-Ready PDF Memorial:** Landscape A4 high-resolution PDF generation with technical title blocks and client metadata.
+* ☁️ **Cloud Projects & Database Persistence**: Supabase PostgreSQL with user-isolated Row-Level Security (RLS).
 
-```env
-# Supabase Configuration
-VITE_SUPABASE_URL=https://sua-instancia.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=sua_chave_publica_anonima_aqui
-VITE_SUPABASE_PROJECT_ID=seu_project_id_aqui
+---
+
+## 🏗️ Architecture
+
+```
+SolarCad/
+├── src/
+│   ├── components/
+│   │   ├── DiagramCanvas.tsx       # 2D Interactive Canvas with Pan/Zoom & DXF exports
+│   │   ├── ProjectForm.tsx         # Client, engineering, and utility input form
+│   │   └── EquipmentBlockForm.tsx  # Inverter and string configuration form
+│   ├── services/
+│   │   ├── dxfExporter.ts          # AutoCAD DXF R12 ASCII vector generator
+│   │   ├── engineering.ts          # NBR 5410 & NBR 16690 calculation engine
+│   │   └── pdfService.ts           # jsPDF engineering report generator
+│   ├── test/
+│   │   └── engineering.test.ts     # Vitest automated test suite for electrical calculations
+│   ├── constants/                  # Standard breakers, paper sizes & voltage levels
+│   └── types/                      # TypeScript schemas & interfaces
+├── package.json
+└── vite.config.ts
 ```
 
-> 🛡️ **DevSecOps Note:** O arquivo `.env` contendo credenciais reais está estritamente bloqueado no `.gitignore` e nunca deve ser enviado ao controle de versão.
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technologies |
+| :--- | :--- |
+| **Frontend Framework** | React 18, TypeScript 5.8 |
+| **Build & Tooling** | Vite 5, Tailwind CSS, Shadcn UI / Radix |
+| **CAD & Vector Engines** | HTML5 Canvas 2D API, Custom DXF R12 Serializer, jsPDF |
+| **State & Persistence** | TanStack React Query, Supabase PostgreSQL |
+| **Testing** | Vitest |
 
 ---
 
-## 💻 Guia de Execução Local
+## ⚡ Getting Started
 
-### Pré-requisitos
-- **Node.js** v18 ou superior
-- Gerenciador de pacotes: **npm**, **pnpm** ou **bun**
+### 1. Prerequisites
+* Node.js `>= 18.0.0`
+* npm or pnpm
 
-### Passo a Passo
+### 2. Installation
 
-1. **Clonar o Repositório:**
-   ```bash
-   git clone https://github.com/lucasantannaeng/SolarCad.git
-   cd SolarCad
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/lucasantannaeng/SolarCad.git
+cd SolarCad
 
-2. **Instalar Dependências:**
-   ```bash
-   npm install
-   # ou
-   bun install
-   ```
+# Install dependencies
+npm install
 
-3. **Configurar as Variáveis de Ambiente:**
-   ```bash
-   cp .env.example .env
-   # Edite o arquivo .env preenchendo as credenciais do seu projeto Supabase
-   ```
+# Setup environment configuration
+cp .env.example .env
+```
 
-4. **Iniciar o Servidor de Desenvolvimento:**
-   ```bash
-   npm run dev
-   # ou
-   bun dev
-   ```
-   Acesse no navegador: `http://localhost:8080` (ou porta informada no terminal).
+### 3. Development Server
+
+```bash
+npm run dev
+```
+
+The application will run locally at `http://localhost:5173`.
 
 ---
 
-## 📜 Scripts Disponíveis
+## 🧪 Testing
 
-- `npm run dev`: Inicia o servidor de desenvolvimento Vite.
-- `npm run build`: Compila e gera os artefatos otimizados de produção na pasta `dist/`.
-- `npm run preview`: Executa a visualização da versão compilada de produção.
-- `npm run lint`: Executa a verificação estática do código com ESLint.
-- `npm run test`: Executa os testes unitários utilizando Vitest.
+```bash
+# Run Vitest test suite
+npm test
+
+# Build production bundle
+npm run build
+```
 
 ---
 
-## 🔒 Conformidade DevSecOps
+## 📄 License
 
-Este repositório passa por auditorias continuadas de segurança:
-- Zero credenciais, tokens JWT ou senhas em hardcode no código-fonte.
-- Bloqueio completo de artefatos temporários, `.env` e `node_modules` no `.gitignore`.
-- Versionamento limpo seguindo as diretrizes recomendadas pela OWASP.
+Licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+Authored by **Luca Rodrigues Gomes de Sant'Anna**.
