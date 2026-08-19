@@ -846,41 +846,57 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
   }, [projectData]);
 
   const handleDownloadPDF = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const pdf = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: [PAGE_W, PAGE_H],
-      compress: true,
-    });
-    pdf.setProperties({
-      title: `Diagrama Unifilar - ${projectData.client.name || 'Projeto'}`,
-      subject: `Microgeração FV - UC ${projectData.client.utilityId || ''}`,
-      author: projectData.engineer?.name || 'SolarCAD',
-      creator: 'SolarCAD - Suite GD',
-    });
-    const imgData = canvas.toDataURL('image/png', 1.0);
-    // 'SLOW' = max-quality compression, preserves thin lines
-    pdf.addImage(imgData, 'PNG', 0, 0, PAGE_W, PAGE_H, undefined, 'SLOW');
-    pdf.save(`Diagrama_${projectData.client.name.replace(/\s+/g, '_') || 'projeto'}.pdf`);
+    try {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: [PAGE_W, PAGE_H],
+        compress: true,
+      });
+      pdf.setProperties({
+        title: `Diagrama Unifilar - ${projectData.client.name || 'Projeto'}`,
+        subject: `Microgeração FV - UC ${projectData.client.utilityId || ''}`,
+        author: projectData.engineer?.name || 'SolarCAD',
+        creator: 'SolarCAD - Suite GD',
+      });
+      const imgData = canvas.toDataURL('image/png', 1.0);
+      pdf.addImage(imgData, 'PNG', 0, 0, PAGE_W, PAGE_H, undefined, 'SLOW');
+      const filename = `Diagrama_${projectData.client.name.replace(/\s+/g, '_') || 'projeto'}.pdf`;
+      pdf.save(filename);
+      toast.success(`Laudo PDF (${filename}) exportado com sucesso!`);
+    } catch {
+      toast.error('Erro ao gerar diagrama PDF');
+    }
   };
 
   const [zoom, setZoom] = useState<number>(1.0);
 
   const handleDownloadDXF = () => {
-    const dxfContent = generateSolarUnifilarDxf(projectData);
-    const filename = `Diagrama_${projectData.client.name.replace(/\s+/g, '_') || 'projeto'}.dxf`;
-    downloadDxfFile(filename, dxfContent);
+    try {
+      const dxfContent = generateSolarUnifilarDxf(projectData);
+      const filename = `Diagrama_${projectData.client.name.replace(/\s+/g, '_') || 'projeto'}.dxf`;
+      downloadDxfFile(filename, dxfContent);
+      toast.success(`Arquivo CAD DXF (${filename}) exportado com sucesso!`);
+    } catch {
+      toast.error('Erro ao gerar arquivo DXF');
+    }
   };
 
   const handleDownloadPNG = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const link = document.createElement('a');
-    link.download = `Diagrama_${projectData.client.name.replace(/\s+/g, '_') || 'projeto'}.png`;
-    link.href = canvas.toDataURL('image/png', 1.0);
-    link.click();
+    try {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const link = document.createElement('a');
+      const filename = `Diagrama_${projectData.client.name.replace(/\s+/g, '_') || 'projeto'}.png`;
+      link.download = filename;
+      link.href = canvas.toDataURL('image/png', 1.0);
+      link.click();
+      toast.success(`Imagem PNG (${filename}) salva com sucesso!`);
+    } catch {
+      toast.error('Erro ao exportar imagem PNG');
+    }
   };
 
   return (
