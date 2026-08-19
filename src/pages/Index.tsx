@@ -10,9 +10,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { supabase } from '@/integrations/supabase/client';
 import { SavedProjects } from '@/components/SavedProjects';
-import { Sun, LayoutDashboard, Archive, Save, Loader2, LogOut, Database, FolderOpen } from 'lucide-react';
+import { Sun, LayoutDashboard, Archive, Save, Loader2, LogOut, Database, FolderOpen, Settings } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
+import { ConfigModal } from '@/components/ConfigModal';
 
 const createDefaultBlock = (id: number, module = DEFAULT_MODULE, inverter = DEFAULT_INVERTER): EquipmentBlock => ({
   id,
@@ -45,6 +46,7 @@ const Index = () => {
   const [projectData, setProjectData] = useState<ProjectState>(INITIAL_PROJECT_STATE);
   const [activeTab, setActiveTab] = useState<'form' | 'diagram' | 'projects'>('form');
   const [saving, setSaving] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
   const { modules, inverters, loading } = useEquipment();
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdmin();
@@ -164,6 +166,9 @@ const Index = () => {
             {saving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
             Salvar Projeto
           </button>
+          <button onClick={() => setConfigOpen(true)} className="w-full flex items-center gap-3 px-4 py-3 text-brand-200 hover:bg-brand-800 rounded-lg transition-colors">
+            <Settings size={20} /> Conexão & IA
+          </button>
           {isAdmin && (
             <Link to="/admin" className="w-full flex items-center gap-3 px-4 py-3 text-brand-200 hover:bg-brand-800 rounded-lg transition-colors">
               <Database size={20} /> Gerenciamento
@@ -179,13 +184,22 @@ const Index = () => {
       </aside>
 
       <main className="flex-1 overflow-auto">
-        <header className="bg-card shadow-sm border-b border-border p-6">
-          <h2 className="text-2xl font-bold text-foreground">
-            {activeTab === 'form' ? 'Dados do Projeto' : activeTab === 'diagram' ? 'Diagrama Unifilar' : 'Projetos Salvos'}
-          </h2>
-          <p className="text-muted-foreground">
-            {activeTab === 'form' ? 'Preencha os dados e adicione múltiplos conjuntos de inversores.' : activeTab === 'diagram' ? 'Diagrama com múltiplos inversores e barramento CA.' : 'Gerencie e carregue seus projetos salvos.'}
-          </p>
+        <header className="bg-card shadow-sm border-b border-border p-6 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">
+              {activeTab === 'form' ? 'Dados do Projeto' : activeTab === 'diagram' ? 'Diagrama Unifilar' : 'Projetos Salvos'}
+            </h2>
+            <p className="text-muted-foreground">
+              {activeTab === 'form' ? 'Preencha os dados e adicione múltiplos conjuntos de inversores.' : activeTab === 'diagram' ? 'Diagrama com múltiplos inversores e barramento CA.' : 'Gerencie e carregue seus projetos salvos.'}
+            </p>
+          </div>
+          <button
+            onClick={() => setConfigOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-muted hover:bg-muted/80 text-foreground rounded-lg border border-border transition-all"
+            title="Configurar Supabase & Chaves de IA"
+          >
+            <Settings className="w-3.5 h-3.5 text-brand-500" /> Configurações / IA
+          </button>
         </header>
         <div className="p-6 max-w-6xl mx-auto">
           {activeTab === 'form' ? (
@@ -199,6 +213,9 @@ const Index = () => {
           )}
         </div>
       </main>
+
+      {/* Modal de Configuração de Credenciais / IA para quem clonar */}
+      <ConfigModal open={configOpen} onOpenChange={setConfigOpen} />
     </div>
   );
 };

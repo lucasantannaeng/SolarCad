@@ -39,7 +39,16 @@ export interface JustificationResult {
 }
 
 async function callEdgeFunction<T>(functionName: string, body: any): Promise<T> {
-  const { data, error } = await supabase.functions.invoke(functionName, { body });
+  const customApiKey = typeof window !== 'undefined' ? localStorage.getItem('CUSTOM_AI_API_KEY') : null;
+  const customProvider = typeof window !== 'undefined' ? localStorage.getItem('CUSTOM_AI_PROVIDER') : null;
+
+  const payload = {
+    ...body,
+    customApiKey,
+    customProvider,
+  };
+
+  const { data, error } = await supabase.functions.invoke(functionName, { body: payload });
   
   if (error) throw new Error(error.message || 'Erro na chamada da função');
   if (data?.error) throw new Error(data.error);
