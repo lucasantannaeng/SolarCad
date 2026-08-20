@@ -41,11 +41,11 @@ FOR SELECT
 TO authenticated
 USING (auth.uid() = user_id);
 
--- 4. Seed the admin user role (lucasantannaeng@gmail.com)
+-- 4. Seed the admin user role for default administrator
 INSERT INTO public.user_roles (user_id, role)
 SELECT id, 'admin'::app_role
 FROM auth.users
-WHERE email = 'lucasantannaeng@gmail.com'
+WHERE email = 'admin@solarcad.local'
 ON CONFLICT DO NOTHING;
 
 -- 5. Update RLS policies on inverters: replace email check with has_role
