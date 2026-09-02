@@ -96,3 +96,81 @@ export const getCableForCurrent = (nominalCurrent: number, tech: TechnicalData):
     dps: `DPS Cl.II 20kA ${dpsUc}`,
   };
 };
+
+// ═══════════════════════════════════════════════════════════
+// DC Cable Sizing — Cabos solares PV Wire (1.5kV / 1.8kV)
+// ═══════════════════════════════════════════════════════════
+
+const dcCableTable = [
+  { section: 2.5, capacity: 26 },
+  { section: 4.0, capacity: 34 },
+  { section: 6.0, capacity: 44 },
+  { section: 10.0, capacity: 61 },
+  { section: 16.0, capacity: 82 },
+];
+
+export interface DcCableResult {
+  section: number;
+  capacity: number;
+  voltageDrop: number;
+  label: string;
+  designCurrent: number;
+}
+
+/**
+ * Dimensiona cabo CC para strings fotovoltaicas.
+ * @param isc - Corrente de curto-circuito do módulo (A)
+ * @param stringsInParallel - Strings em paralelo no mesmo MPPT
+ * @param vmpString - Tensão Vmp da string (V)
+ * @param distanceMeters - Distância módulo→inversor (m)
+ */
+export const getDcCable = (
+  isc: number,
+  stringsInParallel: number,
+  vmpString: number,
+  distanceMeters: number,
+): DcCableResult => {
+  const RHO_CU = 0.018; // Ω·mm²/m (cobre a 70°C)
+  const MAX_DROP_PERCENT = 1.5;
+
+  // Corrente de projeto: Isc × 1.25 × N_strings_paralelo
+  const designCurrent = isc * 1.25 * stringsInParallel;
+
+  // Selecionar cabo mínimo por ampacidade
+  let startIdx = dcCableTable.findIndex(c => c.capacity >= designCurrent);
+  if (startIdx === -1) startIdx = dcCableTable.length - 1;
+
+  let finalSection = dcCableTable[startIdx].section;
+  let finalCapacity = dcCableTable[startIdx].capacity;
+  let voltageDropPercent = 100;
+
+  // Iterar seções até atender queda de tensão ≤ 1.5%
+  for (let i = startIdx; i < dcCableTable.length; i++) {
+    const sec = dcCableTable[i].section;
+    // ΔV% = (2 × ρ × L × I) / (S × Vmp,string) × 100
+    const dropPercent = vmpString > 0
+      ? (2 * RHO_CU * distanceMeters * designCurrent) / (sec * vmpString) * 100
+      : 0;
+
+    if (dropPercent <= MAX_DROP_PERCENT) {
+      finalSection = sec;
+      finalCapacity = dcCableTable[i].capacity;
+      voltageDropPercent = dropPercent;
+      break;
+    }
+    finalSection = sec;
+    finalCapacity = dcCableTable[i].capacity;
+    voltageDropPercent = dropPercent;
+  }
+
+  const label = `${finalSection.toFixed(1).replace('.', ',')}mm² 1,5kV CC`;
+
+  return {
+    section: finalSection,
+    capacity: finalCapacity,
+    voltageDrop: voltageDropPercent,
+    label,
+    designCurrent,
+  };
+};
+

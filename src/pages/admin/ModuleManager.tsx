@@ -138,8 +138,19 @@ const ModuleManager = () => {
       ['Imp', moduleForm.imp],
     ];
     const invalid = numericFields.find(([, v]) => !(v > 0));
-    if (invalid) {
-      toast.error(`Valor inválido em "${invalid[0]}": deve ser maior que zero.`);
+    const cleanBrand = moduleForm.brand.trim();
+    const cleanModel = moduleForm.model.trim();
+
+    // Verificação Anti-Duplicidade
+    const isDuplicate = modules.some(
+      mod =>
+        mod.id !== (editingModule ? editingModule.id : -1) &&
+        mod.brand.trim().toLowerCase() === cleanBrand.toLowerCase() &&
+        mod.model.trim().toLowerCase() === cleanModel.toLowerCase()
+    );
+
+    if (isDuplicate) {
+      toast.error(`Módulo fotovoltaico já cadastrado: ${cleanBrand} - ${cleanModel} já existe no banco de dados.`);
       return;
     }
 
@@ -147,8 +158,8 @@ const ModuleManager = () => {
     try {
       const payload = {
         ...moduleForm,
-        brand: moduleForm.brand.trim(),
-        model: moduleForm.model.trim(),
+        brand: cleanBrand,
+        model: cleanModel,
       };
       if (mode === 'edit' && editingModule) {
         const { error } = await supabase.from('modules').update(payload).eq('id', editingModule.id);

@@ -37,8 +37,10 @@ const INITIAL_PROJECT_STATE: ProjectState = {
     voltage: VoltageLevel.V_127_220,
     mainBreaker: 63,
     distance: 15,
+    dcCableDistance: 15,
   },
   equipmentBlocks: [createDefaultBlock(1)],
+  creditBeneficiaries: [],
   paperSize: 'A4',
 };
 
@@ -143,47 +145,53 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row">
-      <aside className="w-full md:w-64 bg-brand-900 text-brand-100 flex-shrink-0">
-        <div className="p-6 flex items-center gap-3 border-b border-brand-700">
-          <Sun className="w-8 h-8 text-accent" />
-          <div>
-            <h1 className="font-bold text-lg leading-tight text-primary-foreground">SolarCAD</h1>
-            <span className="text-xs text-brand-200 opacity-75">Homologação GD</span>
+    <div className="h-screen w-screen bg-background flex flex-col md:flex-row overflow-hidden">
+      <aside className="w-full md:w-64 md:h-screen md:sticky md:top-0 bg-brand-900 text-brand-100 flex flex-col justify-between flex-shrink-0 z-20 shadow-xl border-r border-brand-800/80">
+        <div className="flex flex-col flex-1 overflow-y-auto">
+          <div className="p-5 flex items-center gap-3 border-b border-brand-800/80 bg-brand-950/20">
+            <Sun className="w-8 h-8 text-accent animate-pulse" />
+            <div>
+              <h1 className="font-bold text-lg leading-tight text-primary-foreground">SolarCAD</h1>
+              <span className="text-xs text-brand-200 opacity-75">Homologação GD</span>
+            </div>
           </div>
+          <nav className="p-4 space-y-2 flex-1">
+            <button onClick={() => setActiveTab('form')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors font-medium text-sm ${activeTab === 'form' ? 'bg-brand-800 text-primary-foreground shadow-sm' : 'text-brand-200 hover:bg-brand-800/70 hover:text-white'}`}>
+              <LayoutDashboard size={19} /> Novo Projeto
+            </button>
+            <button onClick={() => setActiveTab('diagram')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors font-medium text-sm ${activeTab === 'diagram' ? 'bg-brand-800 text-primary-foreground shadow-sm' : 'text-brand-200 hover:bg-brand-800/70 hover:text-white'}`}>
+              <Archive size={19} /> Diagrama Unifilar
+            </button>
+            <button onClick={() => setActiveTab('projects')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors font-medium text-sm ${activeTab === 'projects' ? 'bg-brand-800 text-primary-foreground shadow-sm' : 'text-brand-200 hover:bg-brand-800/70 hover:text-white'}`}>
+              <FolderOpen size={19} /> Projetos Salvos
+            </button>
+            <button onClick={saveDraft} disabled={saving} className="w-full flex items-center gap-3 px-4 py-3 text-brand-200 hover:bg-brand-800/70 hover:text-white rounded-lg transition-colors disabled:opacity-50 font-medium text-sm">
+              {saving ? <Loader2 size={19} className="animate-spin" /> : <Save size={19} />}
+              Salvar Projeto
+            </button>
+            <button onClick={() => setConfigOpen(true)} className="w-full flex items-center gap-3 px-4 py-3 text-brand-200 hover:bg-brand-800/70 hover:text-white rounded-lg transition-colors font-medium text-sm">
+              <Settings size={19} /> Conexão & IA
+            </button>
+            {isAdmin && (
+              <Link to="/admin" className="w-full flex items-center gap-3 px-4 py-3 text-brand-200 hover:bg-brand-800/70 hover:text-white rounded-lg transition-colors font-medium text-sm">
+                <Database size={19} /> Gerenciamento
+              </Link>
+            )}
+          </nav>
         </div>
-        <nav className="p-4 space-y-2">
-          <button onClick={() => setActiveTab('form')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'form' ? 'bg-brand-800 text-primary-foreground' : 'text-brand-200 hover:bg-brand-800'}`}>
-            <LayoutDashboard size={20} /> Novo Projeto
-          </button>
-          <button onClick={() => setActiveTab('diagram')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'diagram' ? 'bg-brand-800 text-primary-foreground' : 'text-brand-200 hover:bg-brand-800'}`}>
-            <Archive size={20} /> Diagrama Unifilar
-          </button>
-          <button onClick={() => setActiveTab('projects')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'projects' ? 'bg-brand-800 text-primary-foreground' : 'text-brand-200 hover:bg-brand-800'}`}>
-            <FolderOpen size={20} /> Projetos Salvos
-          </button>
-          <button onClick={saveDraft} disabled={saving} className="w-full flex items-center gap-3 px-4 py-3 text-brand-200 hover:bg-brand-800 rounded-lg transition-colors disabled:opacity-50">
-            {saving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
-            Salvar Projeto
-          </button>
-          <button onClick={() => setConfigOpen(true)} className="w-full flex items-center gap-3 px-4 py-3 text-brand-200 hover:bg-brand-800 rounded-lg transition-colors">
-            <Settings size={20} /> Conexão & IA
-          </button>
-          {isAdmin && (
-            <Link to="/admin" className="w-full flex items-center gap-3 px-4 py-3 text-brand-200 hover:bg-brand-800 rounded-lg transition-colors">
-              <Database size={20} /> Gerenciamento
-            </Link>
+        <div className="p-4 space-y-2 border-t border-brand-800/80 bg-brand-950/40">
+          {user && (
+            <div className="text-xs text-brand-200 truncate text-center font-mono py-1 px-2 rounded bg-brand-900/50" title={user.email}>
+              {user.email}
+            </div>
           )}
-        </nav>
-        <div className="md:fixed md:bottom-0 md:left-0 md:w-64 p-4 space-y-2 bg-brand-900">
-          {user && <div className="text-xs text-brand-200 truncate text-center" title={user.email}>{user.email}</div>}
-          <button onClick={signOut} className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs text-brand-200 hover:bg-brand-800 rounded-lg transition-colors">
+          <button onClick={signOut} className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-brand-200 hover:bg-brand-800 hover:text-white rounded-lg transition-colors">
             <LogOut size={14} /> Sair
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 h-screen overflow-y-auto flex flex-col bg-background">
         <header className="bg-card shadow-sm border-b border-border p-6 flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-foreground">

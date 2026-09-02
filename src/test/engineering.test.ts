@@ -131,4 +131,130 @@ describe('SolarCad - Testes de Cálculos de Engenharia (NBR 5410 / NBR 16690)', 
     expect(dxf).not.toContain('\r');
     expect(dxf).toContain('EOF');
   });
+
+  it('deve validar topologia de microinversores corretamente', () => {
+    const mockMicroBlock = {
+      id: 1,
+      module: { brand: 'Trina Solar', model: 'Vertex 550W', power: 550, voc: 38.0, vmp: 31.5, isc: 17.5, imp: 16.5 },
+      moduleQty: 4,
+      inverter: {
+        brand: 'Hoymiles',
+        model: 'HMS-2000-4T',
+        power: 2.0,
+        nominalOutputVoltage: 220,
+        maxDcVoltage: 65,
+        maxInputCurrent: 16.0,
+        mpptMin: 16,
+        mpptMax: 60,
+        mpptCount: 4,
+        outputPhases: 1,
+        inverterType: 'micro' as const,
+        maxMicrosInSeries: 3,
+        maxInputPowerW: 600,
+      },
+      inverterQty: 1,
+      strings: [{ id: 1, count: 4 }],
+    };
+
+    const mockTechnical = {
+      voltage: '127/220V' as any,
+      connectionType: 'BIFASICO' as any,
+      mainBreaker: 40,
+      distance: 15,
+      dcCableDistance: 10,
+      utility: 'LIGHT' as any,
+    };
+
+    const result = getBlockEngineeringStatus(mockMicroBlock as any, mockTechnical as any);
+    expect(result.nominalCurrent).toBeCloseTo(9.09, 1);
+    expect(result.suggestedBreaker).toBe(16);
+    expect(result.dcProtection.fuseRequired).toBe(false);
+    expect(result.status).toBe('SUCCESS');
+  });
+
+  it('deve emitir warning quando quantidade de microinversores excede limite do trunk cable', () => {
+    const mockMicroBlock = {
+      id: 1,
+      module: { brand: 'Trina Solar', model: 'Vertex 550W', power: 550, voc: 38.0, vmp: 31.5, isc: 17.5, imp: 16.5 },
+      moduleQty: 20,
+      inverter: {
+        brand: 'Hoymiles',
+        model: 'HMS-2000-4T',
+        power: 2.0,
+        nominalOutputVoltage: 220,
+        maxDcVoltage: 65,
+        maxInputCurrent: 16.0,
+        mpptMin: 16,
+        mpptMax: 60,
+        mpptCount: 4,
+        outputPhases: 1,
+        inverterType: 'micro' as const,
+        maxMicrosInSeries: 3,
+        maxInputPowerW: 600,
+      },
+      inverterQty: 5, // 5 > 3 maxMicrosInSeries
+      strings: [{ id: 1, count: 4 }],
+    };
+
+    const mockTechnical = {
+      voltage: '127/220V' as any,
+      connectionType: 'BIFASICO' as any,
+      mainBreaker: 63,
+      distance: 15,
+      dcCableDistance: 10,
+      utility: 'LIGHT' as any,
+    };
+
+    const result = getBlockEngineeringStatus(mockMicroBlock as any, mockTechnical as any);
+    expect(result.warnings.some(w => w.includes('trunk cable'))).toBe(true);
+  });
+
+  it('deve alertar clipping quando corrente operacional da string paralela exceder limite do inversor', () => {
+    const mockBlock = {
+      id: 1,
+      module: { brand: 'Trina Solar', model: 'Vertex 600W', power: 600, voc: 41.7, vmp: 34.9, isc: 18.0, imp: 17.2 },
+      moduleQty: 20,
+      inverter: {
+        brand: 'Growatt', model: 'MIN 5000TL-X', power: 5.0, nominalOutputVoltage: 220,
+        maxDcVoltage: 550, maxInputCurrent: 16.0, mpptMin: 80, mpptMax: 500, mpptCount: 1, outputPhases: 1,
+        inverterType: 'string' as const,
+      },
+      inverterQty: 1,
+      // 2 strings em 1 MPPT -> parallelPerMppt = 2 -> Imp = 34.4A > 16.0A maxInputCurrent
+      strings: [{ id: 1, count: 10 }, { id: 2, count: 10 }],
+    };
+
+    const mockTechnical = {
+      voltage: '127/220V' as any, connectionType: 'BIFASICO' as any,
+      mainBreaker: 40, distance: 15, dcCableDistance: 15, utility: 'LIGHT' as any,
+    };
+
+    const result = getBlockEngineeringStatus(mockBlock as any, mockTechnical as any);
+    expect(result.warnings.some(w => w.includes('clipping de corrente') || w.includes('excede limite seguro'))).toBe(true);
+  });
+
+  it('deve bloquear com status ERROR quando corrente Isc em paralelo exceder limite térmico seguro', () => {
+    const mockBlock = {
+      id: 1,
+      module: { brand: 'Canadian Solar', model: 'BiHiKu7 665W', power: 665, voc: 46.0, vmp: 38.5, isc: 18.5, imp: 17.3 },
+      moduleQty: 30,
+      inverter: {
+        brand: 'Growatt', model: 'MIN 6000TL-X', power: 6.0, nominalOutputVoltage: 220,
+        maxDcVoltage: 1000, maxInputCurrent: 16.0, mpptMin: 80, mpptMax: 550, mpptCount: 1, outputPhases: 1,
+        inverterType: 'string' as const,
+      },
+      inverterQty: 1,
+      // 3 strings em 1 MPPT -> Isc = 3 * 18.5 = 55.5A > 16.0 * 1.25 (20A)
+      strings: [{ id: 1, count: 10 }, { id: 2, count: 10 }, { id: 3, count: 10 }],
+    };
+
+    const mockTechnical = {
+      voltage: '127/220V' as any, connectionType: 'BIFASICO' as any,
+      mainBreaker: 40, distance: 15, dcCableDistance: 15, utility: 'LIGHT' as any,
+    };
+
+    const result = getBlockEngineeringStatus(mockBlock as any, mockTechnical as any);
+    expect(result.status).toBe('ERROR');
+    expect(result.warnings.some(w => w.includes('Risco de queima da entrada MPPT'))).toBe(true);
+  });
 });

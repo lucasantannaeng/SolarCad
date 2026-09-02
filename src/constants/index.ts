@@ -3,6 +3,8 @@ import { UtilityCompany, ConnectionType, VoltageLevel } from '../types';
 export const UTILITIES = [
   { value: UtilityCompany.LIGHT, label: 'Light (RJ) - RECON BT' },
   { value: UtilityCompany.ENEL_RJ, label: 'Enel (RJ) - CNC-GD' },
+  { value: UtilityCompany.CERCI, label: 'CERCI (RJ) - Cooperativa Cantagalo' },
+  { value: UtilityCompany.ENERGISA, label: 'Energisa (RJ/MG/Nacional) - NDU-013' },
 ];
 
 export const CONNECTION_TYPES = [
@@ -49,4 +51,5 @@ export const DEFAULT_INVERTER = {
   mpptCount: 0,
   nominalOutputVoltage: 0,
   outputPhases: 1,
+  inverterType: 'string' as const,
 };

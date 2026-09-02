@@ -65,20 +65,31 @@ export function generateSolarUnifilarDxf(projectData: ProjectState): string {
     const inverterPhases = sanitizeDxfText(String(block.inverter?.outputPhases || ''));
     const moduleBrand = sanitizeDxfText(block.module?.brand || block.moduleBrand || '');
 
-    // Inversor
+    const isMicro = block.inverter?.inverterType === 'micro';
+    const equipTitle = isMicro
+      ? (block.inverterQty > 1 ? `MICRO (${block.inverterQty}x)` : `MICROINVERSOR`)
+      : `INVERSOR ${idx + 1}`;
+
+    // Inversor / Microinversor
     entities.push({ type: 'RECT', layer: 'EQUIPMENT', x1: startX, y1: 120, x2: startX + 35, y2: 155 });
-    entities.push({ type: 'TEXT', layer: 'TEXT', x1: startX + 2, y1: 145, text: `INVERSOR ${idx + 1}`, size: 2.5 });
+    entities.push({ type: 'TEXT', layer: 'TEXT', x1: startX + 2, y1: 145, text: equipTitle, size: 2.5 });
     entities.push({ type: 'TEXT', layer: 'TEXT', x1: startX + 2, y1: 135, text: `${inverterModel}`, size: 2.0 });
     entities.push({ type: 'TEXT', layer: 'TEXT', x1: startX + 2, y1: 125, text: `${block.inverter?.power || block.inverterPowerKw || 0} kW (${inverterPhases}F)`, size: 2.0 });
 
     // Conexão CC (Módulos -> Inversor)
     entities.push({ type: 'LINE', layer: 'DC_CABLE', x1: startX + 17.5, y1: 120, x2: startX + 17.5, y2: 90 });
+    if (isMicro) {
+      entities.push({ type: 'TEXT', layer: 'TEXT', x1: startX + 19, y1: 105, text: 'MC4 PLUG&PLAY (SEM STRING BOX)', size: 1.5 });
+    }
     entities.push({ type: 'RECT', layer: 'MODULES', x1: startX + 5, y1: 70, x2: startX + 30, y2: 90 });
     entities.push({ type: 'TEXT', layer: 'TEXT', x1: startX + 7, y1: 82, text: `${block.moduleQty}x ${block.module?.power || block.modulePowerW || 0}W`, size: 2.0 });
     entities.push({ type: 'TEXT', layer: 'TEXT', x1: startX + 7, y1: 74, text: `${moduleBrand}`, size: 1.8 });
 
-    // Conexão CA (Inversor -> Barramento)
+    // Conexão CA (Inversor -> Barramento / Trunk Cable)
     entities.push({ type: 'LINE', layer: 'AC_CABLE', x1: startX + 17.5, y1: 155, x2: startX + 17.5, y2: 170 });
+    if (isMicro) {
+      entities.push({ type: 'TEXT', layer: 'TEXT', x1: startX + 2, y1: 162, text: 'CABO TRONCO CA', size: 1.5 });
+    }
     entities.push({ type: 'LINE', layer: 'AC_CABLE', x1: startX + 17.5, y1: 170, x2: 40, y2: 170 });
 
     startX += 45;

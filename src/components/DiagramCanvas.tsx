@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ProjectState } from '@/types';
 import { getProjectEngineeringStatus, getBlockEngineeringStatus } from '@/services/engineering';
-import { getCableForCurrent, getPhases } from '@/components/diagram/cableCalculations';
+import { getCableForCurrent, getPhases, getDcCable } from '@/components/diagram/cableCalculations';
 import { generateSolarUnifilarDxf, downloadDxfFile } from '@/services/dxfExporter';
 import { jsPDF } from 'jspdf';
 import { Button } from '@/components/ui/button';
@@ -438,7 +438,38 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
 
       const dcBusX = clampX(bx + bw * 0.35);
 
-      if (invIdx === 0) {
+      const isMicro = block.inverter?.inverterType === 'micro';
+
+      if (isMicro) {
+        // ── ZONE CC (MICROINVERSOR): Módulos com conexão direta MC4 ao micro (Sem StringBox) ──
+        const modsPerMicro = Math.max(1, Math.round(block.moduleQty / Math.max(block.inverterQty || 1, 1)));
+        const moduleW = 5;
+        const moduleH = 8;
+        const modSpacing = 6;
+        const totalModsW = modsPerMicro * moduleW + (modsPerMicro - 1) * (modSpacing - moduleW);
+        const startModX = centerX - (modsPerMicro > 1 ? 4 : moduleW / 2);
+
+        // Desenha módulos do micro
+        for (let m = 0; m < Math.min(modsPerMicro, 4); m++) {
+          const mx = clampX(startModX + m * 7);
+          const my = ccTop + 4;
+          const modAnch = drawModule(mx, my, moduleW, moduleH);
+
+          if (m === 0) {
+            drawLabel(`${block.moduleBrand || 'PV'} ${block.moduleModel || ''}`, mx, my - 5, { font: '2.2px Arial', spec: true });
+            drawLabel(`${block.modulePowerW}W`, mx, my - 2, { font: '2.2px Arial', spec: true });
+          }
+
+          // Conexão CC direta MC4 descendo para o microinversor
+          const dcDropBottom: Anchor = { x: modAnch.bottom!.x, y: convTop + 2 };
+          drawConnection(modAnch.bottom!, dcDropBottom, { dot: 'start', weight: 0.35 });
+        }
+
+        drawLabel(`${modsPerMicro}x Módulos (MC4 Plug&Play)`, centerX, (ccTop + ccBot) / 2 + 3, { align: 'center', font: '1.8px Arial', spec: true });
+        drawLabel('Entrada CC Baixa Tensão (<60V)', centerX, (ccTop + ccBot) / 2 + 6.5, { align: 'center', font: '1.6px Arial', spec: true });
+        drawLabel('Sem String Box Externa', centerX, (ccTop + ccBot) / 2 + 10, { align: 'center', font: '1.5px Arial', spec: true });
+
+      } else if (invIdx === 0) {
         // Draw strings only once per block (first physical inverter of that block)
         block.strings.forEach((str, sIdx) => {
           const sy = clampY(stringsStartY + sIdx * stringSpacing);
@@ -461,7 +492,17 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
           drawConnection(fuseAnch.right!, busAnchor, { dot: 'end' });
 
           if (sIdx === 0) {
-            drawLabel('6mm² 1,5kV CC', fuseAnch.center!.x, sy - 3.5, { align: 'center', font: '2.5px Arial', spec: true });
+            // Cabo CC calculado: getDcCable(Isc, strings paralelas, Vmp string, distância)
+            const avgModulesPerString = Math.round(block.moduleQty / Math.max(numStrings, 1));
+            const vmpString = avgModulesPerString * (block.module.vmp || 0);
+            const dcDist = projectData.technical.dcCableDistance || 15;
+            const dcCable = getDcCable(block.module.isc, 1, vmpString, dcDist);
+            drawLabel(dcCable.label, fuseAnch.center!.x, sy - 3.5, { align: 'center', font: '2.5px Arial', spec: true });
+            // Fusível CC com valor calculado
+            const fuseLabel = blockEng.dcProtection.fuseRequired
+              ? `Fus. ${blockEng.dcProtection.fuseRating}A ${blockEng.dcProtection.fuseVoltage}V`
+              : `Fus. ${blockEng.dcProtection.fuseRating}A`;
+            drawLabel(fuseLabel, fuseAnch.center!.x, sy + 3.5, { align: 'center', font: '2px Arial', spec: true });
           }
         });
 
@@ -488,7 +529,7 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
         drawConnection(swAnch.right!, dpsCCbus, { dot: 'end' });
         const dpsDown: Anchor = { x: dpsCCx, y: midCC + 6 };
         drawConnection(dpsCCbus, dpsDown);
-        drawDPS(dpsCCx, midCC + 6, "DPS CC");
+        drawDPS(dpsCCx, midCC + 6, `DPS CC ${blockEng.dcProtection.dpsClass} ${blockEng.dcProtection.dpsVoltage}V`);
 
         // Vertical line: DC zone → Inverter
         const invEntryX = centerX;
@@ -519,9 +560,10 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
 
       const invAnch = drawInverter(invX, invY, invW, invH);
 
+      const invPrefix = isMicro ? 'MICRO' : 'INV';
       const invLabel = (block.inverterQty || 1) > 1
-        ? `${block.inverterBrand || 'INV'} ${block.inverterModel || ''} #${invIdx + 1}`
-        : `${block.inverterBrand || 'INV'} ${block.inverterModel || ''}`;
+        ? `${block.inverterBrand || invPrefix} ${block.inverterModel || ''} #${invIdx + 1}`
+        : `${block.inverterBrand || invPrefix} ${block.inverterModel || ''}`;
       // Textos do Inversor deslocados para a ESQUERDA do componente
       const textRightX = invX - 3; // 3mm de respiro da borda esquerda do inversor
       const textMidY = invY + (invH / 2); // Centralizado verticalmente
@@ -577,10 +619,15 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
       ctx.restore();
       ctx.strokeStyle = '#000';
 
-      drawLabel('CAIXA DE CONEXÃO CA', boxLeft + 2, boxTop + 4, { font: '2.2px Arial', bold: true, spec: true });
+      const isAnyMicro = blocks.some(b => b.inverter?.inverterType === 'micro');
+      const boxTitle = isAnyMicro ? 'QUADRO DE JUNÇÃO CA / TRUNK CABLE' : 'CAIXA DE CONEXÃO CA';
+      drawLabel(boxTitle, boxLeft + 2, boxTop + 4, { font: '2.2px Arial', bold: true, spec: true });
 
-      // 2. Barramento de Agrupamento Horizontal
+      // 2. Barramento de Agrupamento Horizontal (Cabo Tronco Daisy-Chain para micros)
       drawConnection({ x: minEntryX, y: busbarAcY }, { x: maxEntryX, y: busbarAcY }, { weight: LW_POWER });
+      if (isAnyMicro) {
+        drawLabel('Cabo Tronco CA (Daisy-Chain)', minEntryX + 2, busbarAcY - 2, { font: '1.8px Arial', spec: true });
+      }
 
       // Conecta todos os inversores a este barramento
       caEntryPoints.forEach(({ centerX: cx, caEntryAnchor: entry }) => {
@@ -598,8 +645,9 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
 
       // 5. Textos do disjuntor posicionados ABAIXO do símbolo, deslocados à direita para não cortar o fio vertical
       const brkTextX = troncoX + 4;
+      const brkTitle = isAnyMicro ? 'DISJUNTOR RAMAL TRUNK' : 'DISJUNTOR PROTEÇÃO';
       drawLabel(correctBreakerLabel, brkTextX, breakerY + 6, { align: 'left', font: '1.8px Arial', bold: true, spec: true });
-      drawLabel('DISJUNTOR PROTEÇÃO', brkTextX, breakerY + 10, { align: 'left', font: '1.8px Arial', spec: true });
+      drawLabel(brkTitle, brkTextX, breakerY + 10, { align: 'left', font: '1.8px Arial', spec: true });
 
       // 6. Conecta o DPS lateralmente (agora mais afastado)
       drawConnection({ x: troncoX, y: busbarAcY + 4 }, { x: dpsCaX, y: busbarAcY + 4 }, { dot: 'start' });

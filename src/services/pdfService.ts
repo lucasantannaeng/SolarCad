@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { ProjectState, UtilityCompany, EquipmentBlock } from '../types';
 import { getProjectEngineeringStatus } from './engineering';
+import { estimateMonthlyGeneration } from './creditDistribution';
 
 export const generateMemorialPDF = (project: ProjectState) => {
   const doc = new jsPDF();
@@ -154,8 +155,9 @@ export const generateMemorialPDF = (project: ProjectState) => {
 
   inverterGroups.forEach(({ block, totalQty }) => {
     const totalPower = block.inverterPowerKw * totalQty;
+      const invLabel = block.inverter?.inverterType === 'micro' ? 'Microinversor' : 'Inversor Interativo';
     equipmentRows.push([
-      'Inversor Interativo', block.inverterBrand, block.inverterModel, totalQty,
+      invLabel, block.inverterBrand, block.inverterModel, totalQty,
       `${block.inverterPowerKw} kW`, `${totalPower.toFixed(2)} kW`,
     ]);
   });
@@ -208,14 +210,33 @@ export const generateMemorialPDF = (project: ProjectState) => {
   // 4. Protections
   addSectionTitle("4. Dispositivos de Proteção e Segurança");
 
-  const protections = [
+  // Build dynamic DC protection descriptions from engineering results
+  const dcProtDesc = engResult.blocks.map((b, i) => {
+    const dc = b.dcProtection;
+    const fuseStr = dc.fuseRequired
+      ? `Fusível gPV ${dc.fuseRating}A / ${dc.fuseVoltage}V (obrigatório: ≥3 strings)`
+      : `Fusível gPV ${dc.fuseRating}A / ${dc.fuseVoltage}V (recomendado)`;
+    return `Conjunto ${i + 1}: ${fuseStr}. Seccionadora CC ${dc.switchRating}A / ${dc.switchVoltage}V. DPS CC ${dc.dpsClass} ${dc.dpsVoltage}V.`;
+  }).join(' ');
+
+  const trafoDesc = engResult.blocks.some(b => b.requiresTransformer)
+    ? engResult.blocks.filter(b => b.requiresTransformer).map((b, i) =>
+        `Conjunto ${b.blockId}: ${b.transformerResult.reason} (${b.transformerResult.suggestedPowerKva} kVA ${b.transformerResult.type})`
+      ).join('. ')
+    : '';
+
+  const protections: string[][] = [
     ["Anti-ilhamento", "O inversor cessa o fornecimento de energia à rede em caso de falha ou desligamento da concessionária (tempo < 2s)."],
     ["Sobretensão/Subtensão (59/27)", "Desconexão automática se a tensão sair da faixa operacional configurada."],
     ["Sobrefrequência/Subfrequência (81)", "Operação restrita à faixa de 57,5 Hz a 62 Hz (conforme norma local)."],
     ["Religamento Automático", "O inversor aguarda 180s após o restabelecimento da rede dentro dos parâmetros ideais antes de reconectar."],
-    ["Proteção CC", "Fusíveis de proteção nas strings (se aplicável) e DPS CC integrados ou externos."],
-    ["Proteção CA", "Disjuntor termomagnético dimensionado e DPS CA no quadro de proteção."],
+    ["Proteção CC (Calculada)", dcProtDesc || "Fusíveis de proteção nas strings (se aplicável) e DPS CC integrados ou externos."],
+    ["Proteção CA", `Disjuntor termomagnético ${engResult.totalSuggestedBreaker}A ${engResult.totalBreakerPolarity} e DPS CA no quadro de proteção.`],
   ];
+
+  if (trafoDesc) {
+    protections.push(["Transformador Isolador", trafoDesc]);
+  }
 
   autoTable(doc, {
     startY: cursorY,
@@ -229,14 +250,57 @@ export const generateMemorialPDF = (project: ProjectState) => {
 
   cursorY = (doc as any).lastAutoTable.finalY + 15;
 
-  // 5. Standards
-  addSectionTitle("5. Normas Técnicas e Regulamentações");
+  // 5. Rateio de Créditos (Lei 14.300)
+  if (project.creditBeneficiaries && project.creditBeneficiaries.length > 0) {
+    addSectionTitle("5. Rateio de Créditos e Geração Compartilhada (Lei 14.300)");
+
+    const estGenTotal = estimateMonthlyGeneration(engResult.totalDcPower);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(`Geração Mensal Estimada da Usina Geradora: ${estGenTotal.toFixed(0)} kWh/mês (HSP 4.8 kWh/m²/dia)`, margin, cursorY);
+    cursorY += 6;
+
+    const rateioRows = project.creditBeneficiaries.map((b) => {
+      const pct = Number(b.percentage) || 0;
+      const estKwh = (estGenTotal * pct) / 100;
+      return [
+        b.utilityId || 'N/A',
+        b.description || 'Beneficiária',
+        b.averageConsumptionKwh ? `${b.averageConsumptionKwh} kWh` : '-',
+        `${pct.toFixed(2)}%`,
+        `${estKwh.toFixed(1)} kWh`,
+      ];
+    });
+
+    const totalPct = project.creditBeneficiaries.reduce((acc, b) => acc + (Number(b.percentage) || 0), 0);
+    rateioRows.push([
+      'TOTAL ALOCADO', '', '', `${totalPct.toFixed(2)}%`, `${(estGenTotal * totalPct / 100).toFixed(1)} kWh`
+    ]);
+
+    autoTable(doc, {
+      startY: cursorY,
+      head: [['Nº da UC Beneficiária', 'Identificação / Titular', 'Consumo Médio', '% Rateio', 'Crédito Estimado']],
+      body: rateioRows,
+      theme: 'striped',
+      headStyles: { fillColor: primaryColor, textColor: 255 },
+      styles: { fontSize: 8.5, halign: 'center' },
+      columnStyles: { 0: { halign: 'left', fontStyle: 'bold' }, 1: { halign: 'left' } },
+      margin: { left: margin, right: margin },
+    });
+
+    cursorY = (doc as any).lastAutoTable.finalY + 15;
+  }
+
+  // Standards Section
+  const standardsSectionNum = (project.creditBeneficiaries && project.creditBeneficiaries.length > 0) ? "6" : "5";
+  addSectionTitle(`${standardsSectionNum}. Normas Técnicas e Regulamentações`);
 
   const norms = [
+    "Lei nº 14.300/2022 - Marco Legal da Microgeração e Minigeração Distribuída.",
+    "Resolução Normativa ANEEL nº 1.000/2021 e 1.059/2023.",
     "ABNT NBR 5410 - Instalações elétricas de baixa tensão.",
     "ABNT NBR 16690 - Instalações elétricas de arranjos fotovoltaicos.",
     "ABNT NBR 16149 - Sistemas fotovoltaicos conectados à rede - Características da interface.",
-    "Resolução Normativa ANEEL nº 482/2012 e 687/2015 (e suas atualizações).",
     project.technical.utility === UtilityCompany.LIGHT ? "Norma Técnica Light RECON-BT." : "Norma Técnica Enel CNC-GD.",
   ];
 

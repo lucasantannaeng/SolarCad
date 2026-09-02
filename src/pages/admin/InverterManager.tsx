@@ -158,8 +158,19 @@ const InverterManager = () => {
       toast.error(`Valor inválido em "${invalid[0]}": deve ser maior que zero.`);
       return;
     }
-    if (inverterForm.mppt_max <= inverterForm.mppt_min) {
-      toast.error('MPPT Máximo deve ser maior que MPPT Mínimo.');
+    const cleanBrand = inverterForm.brand.trim();
+    const cleanModel = inverterForm.model.trim();
+
+    // Verificação Anti-Duplicidade
+    const isDuplicate = inverters.some(
+      inv =>
+        inv.id !== (editingInverter ? editingInverter.id : -1) &&
+        inv.brand.trim().toLowerCase() === cleanBrand.toLowerCase() &&
+        inv.model.trim().toLowerCase() === cleanModel.toLowerCase()
+    );
+
+    if (isDuplicate) {
+      toast.error(`Inversor já cadastrado: ${cleanBrand} - ${cleanModel} já existe no banco de dados.`);
       return;
     }
 
@@ -167,8 +178,8 @@ const InverterManager = () => {
     try {
       const payload = {
         ...inverterForm,
-        brand: inverterForm.brand.trim(),
-        model: inverterForm.model.trim(),
+        brand: cleanBrand,
+        model: cleanModel,
       };
       if (mode === 'edit' && editingInverter) {
         const { error } = await supabase.from('inverters').update(payload).eq('id', editingInverter.id);

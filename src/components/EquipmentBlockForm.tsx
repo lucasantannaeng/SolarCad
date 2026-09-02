@@ -90,6 +90,35 @@ export const EquipmentBlockForm: React.FC<Props> = ({
     }
   };
 
+  const isMicro = block.inverter?.inverterType === 'micro';
+
+  const handleInverterTypeChange = (type: 'string' | 'micro') => {
+    const updatedInverter: InverterData = {
+      ...block.inverter,
+      inverterType: type,
+      mpptCount: type === 'micro' ? (block.inverter.mpptCount || 4) : (block.inverter.mpptCount || 2),
+      maxMicrosInSeries: type === 'micro' ? (block.inverter.maxMicrosInSeries || 3) : undefined,
+      maxInputPowerW: type === 'micro' ? (block.inverter.maxInputPowerW || 600) : undefined,
+      maxDcVoltage: type === 'micro' ? (block.inverter.maxDcVoltage || 60) : (block.inverter.maxDcVoltage || 600),
+    };
+
+    if (type === 'micro') {
+      const perMicro = block.strings[0]?.count || 4;
+      const total = perMicro * (block.inverterQty || 1);
+      onChange({
+        ...block,
+        inverter: updatedInverter,
+        strings: [{ id: 1, count: perMicro }],
+        moduleQty: total,
+      });
+    } else {
+      onChange({
+        ...block,
+        inverter: updatedInverter,
+      });
+    }
+  };
+
   return (
     <div className="bg-secondary/50 p-4 rounded-lg border border-border relative">
       <div className="flex justify-between items-center mb-4">
@@ -111,10 +140,39 @@ export const EquipmentBlockForm: React.FC<Props> = ({
         )}
       </div>
 
+      {/* Inverter Type Selector */}
+      <div className="mb-4 bg-card p-3 rounded-lg border border-border">
+        <label className={labelClass}>Topologia do Inversor</label>
+        <div className="grid grid-cols-2 gap-2 mt-1.5">
+          <button
+            type="button"
+            onClick={() => handleInverterTypeChange('string')}
+            className={`px-3 py-2 text-xs font-semibold rounded-md border transition-all ${
+              !isMicro
+                ? 'bg-brand-600 text-primary-foreground border-brand-600 shadow-sm'
+                : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+            }`}
+          >
+            Inversor String / Central
+          </button>
+          <button
+            type="button"
+            onClick={() => handleInverterTypeChange('micro')}
+            className={`px-3 py-2 text-xs font-semibold rounded-md border transition-all ${
+              isMicro
+                ? 'bg-brand-600 text-primary-foreground border-brand-600 shadow-sm'
+                : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+            }`}
+          >
+            Microinversor (Hoymiles / APsystems / Deye)
+          </button>
+        </div>
+      </div>
+
       {/* Inverter */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 bg-card p-3 rounded-lg border border-border">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4 bg-card p-3 rounded-lg border border-border">
         <div>
-          <label className={labelClass}>Marca do Inversor</label>
+          <label className={labelClass}>{isMicro ? 'Marca do Microinversor' : 'Marca do Inversor'}</label>
           <select className={selectClass} value={block.inverterBrand} onChange={e => handleInverterBrandChange(e.target.value)}>
             <option value="">Selecione...</option>
             {uniqueInverterBrands.map(b => <option key={b} value={b}>{b}</option>)}
@@ -127,13 +185,92 @@ export const EquipmentBlockForm: React.FC<Props> = ({
           </select>
         </div>
         <div>
-          <label className={labelClass}>Qtd. Inversores</label>
-          <input type="number" min="1" className={inputClass} value={block.inverterQty} onChange={e => onChange({ ...block, inverterQty: Number(e.target.value) || 1 })} />
+          <label className={labelClass}>
+            {isMicro ? 'Quantidade de Microinversores' : 'Qtd. Inversores'}
+          </label>
+          <input
+            type="number"
+            min="1"
+            className={inputClass}
+            value={block.inverterQty}
+            onChange={e => {
+              const qty = Number(e.target.value) || 1;
+              const perMicro = block.strings[0]?.count || 0;
+              onChange({
+                ...block,
+                inverterQty: qty,
+                moduleQty: isMicro ? perMicro * qty : block.moduleQty,
+              });
+            }}
+          />
         </div>
-        <div className="flex items-end text-xs text-muted-foreground gap-3">
-          <span>Max DC: {block.inverter.maxDcVoltage}V</span>
-          <span>MPPT: {block.inverter.mpptMin}-{block.inverter.mpptMax}V</span>
-          <span>MPPTs: {block.inverter.mpptCount}</span>
+
+        {/* Microinverter Specific Fields */}
+        {isMicro && (
+          <>
+            <div>
+              <label className={labelClass}>Entradas MPPT por Micro</label>
+              <select
+                className={selectClass}
+                value={block.inverter.mpptCount || 4}
+                onChange={e => onChange({
+                  ...block,
+                  inverter: { ...block.inverter, mpptCount: Number(e.target.value) || 4 },
+                })}
+              >
+                <option value={1}>1 Entrada (1 MPPT)</option>
+                <option value={2}>2 Entradas (2 MPPTs)</option>
+                <option value={4}>4 Entradas (4 MPPTs)</option>
+                <option value={6}>6 Entradas (6 MPPTs)</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>Potência Máx. por Entrada (W)</label>
+              <input
+                type="number"
+                min="100"
+                step="10"
+                className={inputClass}
+                value={block.inverter.maxInputPowerW || 600}
+                onChange={e => onChange({
+                  ...block,
+                  inverter: { ...block.inverter, maxInputPowerW: Number(e.target.value) || 600 },
+                })}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Máx. Micros em Série (Trunk Cable)</label>
+              <input
+                type="number"
+                min="1"
+                className={inputClass}
+                value={block.inverter.maxMicrosInSeries || 3}
+                onChange={e => onChange({
+                  ...block,
+                  inverter: { ...block.inverter, maxMicrosInSeries: Number(e.target.value) || 3 },
+                })}
+              />
+            </div>
+          </>
+        )}
+
+        <div className="md:col-span-2 lg:col-span-3 flex flex-wrap items-center text-xs text-muted-foreground gap-3 pt-1 border-t border-border">
+          {isMicro ? (
+            <>
+              <span className="font-semibold text-brand-600">Topologia: Microinversor AC Daisy-Chain</span>
+              <span>MPPTs: {block.inverter.mpptCount}</span>
+              <span>Max DC: {block.inverter.maxDcVoltage || 60}V</span>
+              {block.inverter.maxInputPowerW && <span>Max/Entrada: {block.inverter.maxInputPowerW}W</span>}
+              {block.inverter.maxMicrosInSeries && <span>Max Trunk: {block.inverter.maxMicrosInSeries} un.</span>}
+              <span>I_trunk: {(engineeringResult.trunkCurrent || engineeringResult.nominalCurrent).toFixed(1)}A</span>
+            </>
+          ) : (
+            <>
+              <span>Max DC: {block.inverter.maxDcVoltage}V</span>
+              <span>MPPT: {block.inverter.mpptMin}-{block.inverter.mpptMax}V</span>
+              <span>MPPTs: {block.inverter.mpptCount}</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -173,26 +310,63 @@ export const EquipmentBlockForm: React.FC<Props> = ({
         <InfoTrigger helpKey="optimizeStrings" size={13} />
       </div>
 
-      {/* Strings */}
-      <div className="mb-3">
-        <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-1">
-          Strings (Total Módulos: {block.moduleQty})
-          <InfoTrigger helpKey="strings" size={13} />
-        </label>
-        {block.strings.map((str, idx) => (
-          <div key={str.id} className="flex items-center gap-2 mb-2">
-            <span className="text-sm font-bold w-16 text-muted-foreground">S{idx + 1}:</span>
-            <input type="number" min="0" className="w-20 p-2 border border-input rounded-md text-center bg-card text-card-foreground text-sm" value={str.count} onChange={e => updateString(str.id, Number(e.target.value))} />
-            <span className="text-xs text-muted-foreground">módulos</span>
-            <button onClick={() => removeString(str.id)} className="text-destructive hover:text-destructive/80 p-1 disabled:opacity-50" disabled={block.strings.length <= 1}>
-              <Trash2 size={14} />
-            </button>
+      {/* Strings / Modulos por Micro */}
+      {block.inverter?.inverterType === 'micro' ? (
+        <div className="mb-3 bg-card p-3 rounded-lg border border-border">
+          <label className="block text-sm font-medium text-foreground mb-2 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              Topologia Microinversor (Total Módulos: {block.moduleQty})
+            </span>
+            <span className="text-xs text-muted-foreground font-mono">
+              {block.inverterQty} micro(s) × {Math.round(block.moduleQty / Math.max(block.inverterQty, 1))} mód/micro
+            </span>
+          </label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className={labelClass}>Módulos por Microinversor</label>
+              <input
+                type="number"
+                min="1"
+                max={block.inverter.mpptCount * 2 || 4}
+                className={inputClass}
+                value={block.strings[0]?.count || 0}
+                onChange={e => {
+                  const perMicro = Number(e.target.value) || 0;
+                  const total = perMicro * block.inverterQty;
+                  onChange({
+                    ...block,
+                    strings: [{ id: 1, count: perMicro }],
+                    moduleQty: total,
+                  });
+                }}
+              />
+            </div>
+            <div className="flex items-center text-xs text-muted-foreground pt-4">
+              <span>Conexão: Entradas MPPT individuais (Plug & Play MC4)</span>
+            </div>
           </div>
-        ))}
-        <button onClick={addString} className="text-sm text-brand-600 font-medium flex items-center gap-1 hover:underline">
-          <Plus size={14} /> String
-        </button>
-      </div>
+        </div>
+      ) : (
+        <div className="mb-3">
+          <label className="block text-sm font-medium text-foreground mb-2 flex items-center gap-1">
+            Strings (Total Módulos: {block.moduleQty})
+            <InfoTrigger helpKey="strings" size={13} />
+          </label>
+          {block.strings.map((str, idx) => (
+            <div key={str.id} className="flex items-center gap-2 mb-2">
+              <span className="text-sm font-bold w-16 text-muted-foreground">S{idx + 1}:</span>
+              <input type="number" min="0" className="w-20 p-2 border border-input rounded-md text-center bg-card text-card-foreground text-sm" value={str.count} onChange={e => updateString(str.id, Number(e.target.value))} />
+              <span className="text-xs text-muted-foreground">módulos</span>
+              <button onClick={() => removeString(str.id)} className="text-destructive hover:text-destructive/80 p-1 disabled:opacity-50" disabled={block.strings.length <= 1}>
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+          <button onClick={addString} className="text-sm text-brand-600 font-medium flex items-center gap-1 hover:underline">
+            <Plus size={14} /> String
+          </button>
+        </div>
+      )}
 
       {/* Block warnings */}
       {engineeringResult.warnings.length > 0 && (
@@ -208,8 +382,11 @@ export const EquipmentBlockForm: React.FC<Props> = ({
 
       <div className="grid grid-cols-3 gap-3 text-xs mt-3 pt-3 border-t border-border">
         <div>
-          <span className="block text-muted-foreground">Corrente</span>
-          <span className="font-mono font-bold">{engineeringResult.nominalCurrent.toFixed(1)} A</span>
+          <span className="block text-muted-foreground">{isMicro ? 'Corrente Trunk (CA)' : 'Corrente CA'}</span>
+          <span className="font-mono font-bold">{(engineeringResult.trunkCurrent || engineeringResult.nominalCurrent).toFixed(1)} A</span>
+          {isMicro && engineeringResult.microNominalCurrent && (
+            <span className="block text-[10px] text-muted-foreground font-mono">({engineeringResult.microNominalCurrent.toFixed(1)}A / micro)</span>
+          )}
         </div>
         <div>
           <span className="block text-muted-foreground">DC/AC</span>
@@ -218,7 +395,7 @@ export const EquipmentBlockForm: React.FC<Props> = ({
           </span>
         </div>
         <div>
-          <span className="block text-muted-foreground">Proteção</span>
+          <span className="block text-muted-foreground">{isMicro ? 'Disjuntor Trunk' : 'Proteção CA'}</span>
           <span className="font-mono font-bold text-brand-600">{engineeringResult.suggestedBreaker}A {engineeringResult.breakerPolarity}</span>
         </div>
       </div>

@@ -1,6 +1,8 @@
 export enum UtilityCompany {
   LIGHT = 'LIGHT',
   ENEL_RJ = 'ENEL_RJ',
+  CERCI = 'CERCI',
+  ENERGISA = 'ENERGISA',
 }
 
 export enum ConnectionType {
@@ -61,6 +63,12 @@ export interface InverterData {
   mpptCount: number;
   nominalOutputVoltage: number;
   outputPhases: number;
+  /** 'string' = inversor central/string, 'micro' = microinversor */
+  inverterType: 'string' | 'micro';
+  /** Máximo de microinversores em série no trunk cable (apenas micro) */
+  maxMicrosInSeries?: number;
+  /** Potência máxima por entrada MPPT em watts (apenas micro) */
+  maxInputPowerW?: number;
 }
 
 export interface StringConfig {
@@ -74,6 +82,8 @@ export interface TechnicalData {
   voltage: VoltageLevel;
   mainBreaker: number;
   distance: number;
+  /** Distância módulos→inversor em metros (para queda de tensão CC). Default 15m */
+  dcCableDistance: number;
 }
 
 export interface EquipmentBlock {
@@ -110,10 +120,28 @@ export interface EquipmentData {
   strings: StringConfig[];
 }
 
+export type GDType = 
+  | 'Autoconsumo remoto' 
+  | 'Consumo Local' 
+  | 'Geração Compartilhada' 
+  | 'Empreendimento com Múltiplas Unidades';
+
+export interface CreditBeneficiary {
+  id: string;
+  utilityId: string;
+  document: string;
+  description: string;
+  percentage: number;
+  isGenerator?: boolean;
+  averageConsumptionKwh?: number;
+}
+
 export interface ProjectState {
   client: ClientData;
   engineer: EngineerData;
   technical: TechnicalData;
   equipmentBlocks: EquipmentBlock[];
+  creditBeneficiaries?: CreditBeneficiary[];
+  gdType?: GDType;
   paperSize: string;
 }
