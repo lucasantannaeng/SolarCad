@@ -41,6 +41,9 @@ export const useEquipment = () => {
           mpptCount: i.mppt_count,
           nominalOutputVoltage: i.nominal_output_voltage,
           outputPhases: i.output_phases ?? 1,
+          inverterType: ((i as any).inverter_type as 'string' | 'micro') || (Number(i.max_dc_voltage) <= 80 ? 'micro' : 'string'),
+          maxMicrosInSeries: (i as any).max_micros_in_series,
+          maxInputPowerW: (i as any).max_input_power_w,
         })));
       }
 

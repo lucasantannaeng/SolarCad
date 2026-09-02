@@ -1,4 +1,4 @@
-project_id = "rjppcterrcbekbspqqmi"
+project_id = "your-supabase-project-id"
 
 [functions.ocr-energy-bill]
 verify_jwt = false

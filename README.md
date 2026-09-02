@@ -145,7 +145,7 @@ This repository enforces **Zero-Trust DevSecOps standards**:
 ## 👤 Author
 
 **Luca Rodrigues Gomes de Sant'Anna**
-* Mechanical Engineer (CREA-RJ) | Senior Full-Stack & AI Systems Engineer
+* Mechanical Engineer (CREA-RJ) | Full-Stack Developer
 * Email: [lucasantannaeng@gmail.com](mailto:lucasantannaeng@gmail.com)
 * GitHub: [@lucasantannaeng](https://github.com/lucasantannaeng)
 

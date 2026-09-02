@@ -2,6 +2,12 @@ import React, { useState } from 'react';
 import { EquipmentBlock, ModuleData, InverterData } from '@/types';
 import { BlockEngineeringResult } from '@/services/engineering';
 import { optimizeStrings } from '@/services/aiService';
+import {
+  filterInvertersByType,
+  getUniqueInverterBrands,
+  getAvailableInvertersByBrand,
+  switchInverterTopology,
+} from '@/services/inverterFilter';
 import { AlertTriangle, CheckCircle, Plus, Trash2, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InfoTrigger } from '@/components/InfoTrigger';
@@ -26,10 +32,14 @@ export const EquipmentBlockForm: React.FC<Props> = ({
   block, blockIndex, totalBlocks, engineeringResult, modules, inverters, onChange, onRemove,
 }) => {
   const [optimizing, setOptimizing] = useState(false);
+  const isMicro = block.inverter?.inverterType === 'micro';
+  const currentInverterType: 'string' | 'micro' = isMicro ? 'micro' : 'string';
+
   const uniqueModuleBrands = Array.from(new Set(modules.map(m => m.brand)));
-  const uniqueInverterBrands = Array.from(new Set(inverters.map(i => i.brand)));
+  const filteredInverters = filterInvertersByType(inverters, currentInverterType);
+  const uniqueInverterBrands = getUniqueInverterBrands(filteredInverters);
   const availableModules = modules.filter(m => m.brand === block.moduleBrand);
-  const availableInverters = inverters.filter(i => i.brand === block.inverterBrand);
+  const availableInverters = getAvailableInvertersByBrand(filteredInverters, block.inverterBrand);
 
   const handleModuleBrandChange = (brand: string) => {
     const first = modules.find(m => m.brand === brand);
@@ -44,13 +54,13 @@ export const EquipmentBlockForm: React.FC<Props> = ({
   };
 
   const handleInverterBrandChange = (brand: string) => {
-    const first = inverters.find(i => i.brand === brand);
+    const first = filteredInverters.find(i => i.brand === brand);
     if (!first) return;
     onChange({ ...block, inverterBrand: brand, inverterId: first.id, inverter: first, inverterModel: first.model, inverterPowerKw: first.power });
   };
 
   const handleInverterModelChange = (id: number) => {
-    const model = inverters.find(i => i.id === id);
+    const model = filteredInverters.find(i => i.id === id);
     if (!model) return;
     onChange({ ...block, inverterId: model.id, inverter: model, inverterBrand: model.brand, inverterModel: model.model, inverterPowerKw: model.power });
   };
@@ -90,33 +100,9 @@ export const EquipmentBlockForm: React.FC<Props> = ({
     }
   };
 
-  const isMicro = block.inverter?.inverterType === 'micro';
-
   const handleInverterTypeChange = (type: 'string' | 'micro') => {
-    const updatedInverter: InverterData = {
-      ...block.inverter,
-      inverterType: type,
-      mpptCount: type === 'micro' ? (block.inverter.mpptCount || 4) : (block.inverter.mpptCount || 2),
-      maxMicrosInSeries: type === 'micro' ? (block.inverter.maxMicrosInSeries || 3) : undefined,
-      maxInputPowerW: type === 'micro' ? (block.inverter.maxInputPowerW || 600) : undefined,
-      maxDcVoltage: type === 'micro' ? (block.inverter.maxDcVoltage || 60) : (block.inverter.maxDcVoltage || 600),
-    };
-
-    if (type === 'micro') {
-      const perMicro = block.strings[0]?.count || 4;
-      const total = perMicro * (block.inverterQty || 1);
-      onChange({
-        ...block,
-        inverter: updatedInverter,
-        strings: [{ id: 1, count: perMicro }],
-        moduleQty: total,
-      });
-    } else {
-      onChange({
-        ...block,
-        inverter: updatedInverter,
-      });
-    }
+    const updated = switchInverterTopology(block, type, inverters);
+    onChange(updated);
   };
 
   return (
@@ -172,15 +158,29 @@ export const EquipmentBlockForm: React.FC<Props> = ({
       {/* Inverter */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4 bg-card p-3 rounded-lg border border-border">
         <div>
-          <label className={labelClass}>{isMicro ? 'Marca do Microinversor' : 'Marca do Inversor'}</label>
-          <select className={selectClass} value={block.inverterBrand} onChange={e => handleInverterBrandChange(e.target.value)}>
+          <label htmlFor={`inverter-brand-${blockIndex}`} className={labelClass}>
+            {isMicro ? 'Marca do Microinversor' : 'Marca do Inversor'}
+          </label>
+          <select
+            id={`inverter-brand-${blockIndex}`}
+            className={selectClass}
+            value={block.inverterBrand}
+            onChange={e => handleInverterBrandChange(e.target.value)}
+          >
             <option value="">Selecione...</option>
             {uniqueInverterBrands.map(b => <option key={b} value={b}>{b}</option>)}
           </select>
         </div>
         <div>
-          <label className={labelClass}>Modelo ({availableInverters.length})</label>
-          <select className={selectClass} value={block.inverterId} onChange={e => handleInverterModelChange(Number(e.target.value))}>
+          <label htmlFor={`inverter-model-${blockIndex}`} className={labelClass}>
+            Modelo ({availableInverters.length})
+          </label>
+          <select
+            id={`inverter-model-${blockIndex}`}
+            className={selectClass}
+            value={block.inverterId}
+            onChange={e => handleInverterModelChange(Number(e.target.value))}
+          >
             {availableInverters.map(i => <option key={i.id} value={i.id}>{i.model} ({i.power}kW)</option>)}
           </select>
         </div>
@@ -277,15 +277,15 @@ export const EquipmentBlockForm: React.FC<Props> = ({
       {/* Module */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 bg-card p-3 rounded-lg border border-border">
         <div>
-          <label className={labelClass}>Marca do Módulo</label>
-          <select className={selectClass} value={block.moduleBrand} onChange={e => handleModuleBrandChange(e.target.value)}>
+          <label htmlFor={`module-brand-${blockIndex}`} className={labelClass}>Marca do Módulo</label>
+          <select id={`module-brand-${blockIndex}`} className={selectClass} value={block.moduleBrand} onChange={e => handleModuleBrandChange(e.target.value)}>
             <option value="">Selecione...</option>
             {uniqueModuleBrands.map(b => <option key={b} value={b}>{b}</option>)}
           </select>
         </div>
         <div>
-          <label className={labelClass}>Modelo ({availableModules.length})</label>
-          <select className={selectClass} value={block.moduleId} onChange={e => handleModuleModelChange(Number(e.target.value))}>
+          <label htmlFor={`module-model-${blockIndex}`} className={labelClass}>Modelo ({availableModules.length})</label>
+          <select id={`module-model-${blockIndex}`} className={selectClass} value={block.moduleId} onChange={e => handleModuleModelChange(Number(e.target.value))}>
             {availableModules.map(m => <option key={m.id} value={m.id}>{m.model} ({m.power}W)</option>)}
           </select>
         </div>

@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- SCRIPT DE SEGURANÇA, RLS E ANTI-DUPLICIDADE — SolarCAD Supabase
--- Autor: Luca Rodrigues Gomes de Sant'Anna (lucasantannaeng@gmail.com)
+-- Autor: Luca Rodrigues Gomes de Sant'Anna
 -- ==============================================================================
 
 -- 1. ÍNDICES ÚNICOS ANTI-DUPLICIDADE (Normalizados em Minúsculas e sem Espaços)
@@ -44,14 +44,14 @@ CREATE POLICY "Permitir inserção de inversores por usuários autenticados"
     max_dc_voltage > 0
   );
 
--- ATUALIZAÇÃO / EXCLUSÃO: Apenas o administrador do sistema
+-- ATUALIZAÇÃO / EXCLUSÃO: Apenas o administrador do sistema (via app_metadata role ou admin email configurado)
 CREATE POLICY "Apenas admin pode atualizar ou excluir inversores"
   ON public.inverters
   FOR ALL
   TO authenticated
   USING (
-    (auth.jwt() ->> 'email') = 'lucasantannaeng@gmail.com' OR
-    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' OR
+    (auth.jwt() ->> 'email') = COALESCE(current_setting('app.admin_email', true), 'admin@solarcad.internal')
   );
 
 
@@ -87,8 +87,8 @@ CREATE POLICY "Apenas admin pode atualizar ou excluir módulos"
   FOR ALL
   TO authenticated
   USING (
-    (auth.jwt() ->> 'email') = 'lucasantannaeng@gmail.com' OR
-    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' OR
+    (auth.jwt() ->> 'email') = COALESCE(current_setting('app.admin_email', true), 'admin@solarcad.internal')
   );
 
 
