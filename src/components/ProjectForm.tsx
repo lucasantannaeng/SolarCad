@@ -9,6 +9,8 @@ import { downloadEnelAccessFormPDF } from '@/services/enelAccessFormService';
 import { downloadLightFormPDF } from '@/services/lightFormService';
 import { downloadCerciFormPDF } from '@/services/cerciFormService';
 import { downloadEnergisaFormPDF } from '@/services/energisaFormService';
+import { downloadPowerOfAttorneyPDF } from '@/services/powerOfAttorneyService';
+import { useCompanyProfile } from '@/hooks/useCompanyProfile';
 import { EquipmentBlockForm } from './EquipmentBlockForm';
 import { AlertTriangle, CheckCircle, FileText, Zap, Plus, ScanLine, Loader2, Sparkles, Share2, Trash2, Users, Percent, FileSpreadsheet, Building2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -174,6 +176,41 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
     }
   };
 
+  const { profile: savedCompanyProfile } = useCompanyProfile();
+
+  const handleGeneratePowerOfAttorney = () => {
+    try {
+      const currentCompany = data.companyProfile || savedCompanyProfile;
+      if (!data.client.name) {
+        toast.warning('Informe o Nome do Cliente (Outorgante) antes de gerar a procuração.');
+        return;
+      }
+      downloadPowerOfAttorneyPDF(data, currentCompany);
+      toast.success('Procuração GD Oficial gerada com sucesso (pronta para assinatura digital Gov.br/Clicksign)!');
+    } catch (err: any) {
+      console.error('Erro ao gerar procuração:', err);
+      toast.error(`Erro ao gerar procuração: ${err.message}`);
+    }
+  };
+
+  const handleLoadCompanyProfile = () => {
+    if (!savedCompanyProfile?.companyName && !savedCompanyProfile?.legalRepresentative?.name) {
+      toast.warning('Nenhum perfil de empresa cadastrado ainda. Use a opção "Empresa & Procurador" na barra lateral.');
+      return;
+    }
+
+    const rep = savedCompanyProfile.legalRepresentative;
+    onChange({
+      ...data,
+      companyProfile: savedCompanyProfile,
+      engineer: {
+        name: rep.name || data.engineer?.name || '',
+        crea: rep.creaCft ? `${rep.creaCft}/${rep.creaState}` : data.engineer?.crea || '',
+      },
+    });
+    toast.success('Dados da Empresa Integradora e Responsável Técnico carregados no projeto!');
+  };
+
   // === OCR ===
   const handleOcrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -315,16 +352,28 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
             Concessionária e Padrão
             <InfoTrigger helpKey="concessionaria" />
           </h2>
-          <Button
-            type="button"
-            onClick={handleGenerateUtilityAccessForm}
-            variant="outline"
-            className="border-brand-500/40 hover:bg-brand-500/10 text-brand-700 dark:text-brand-300 font-bold gap-2 shadow-sm text-xs md:text-sm"
-            title={`Gera o formulário oficial de solicitação de acesso para ${getUtilityShortLabel(data.technical.utility)}`}
-          >
-            <FileSpreadsheet className="w-4 h-4 text-brand-500" />
-            📄 Gerar Formulário de Acesso ({getUtilityShortLabel(data.technical.utility)})
-          </Button>
+          <div className="flex items-center flex-wrap gap-2">
+            <Button
+              type="button"
+              onClick={handleGeneratePowerOfAttorney}
+              variant="outline"
+              className="border-accent/50 hover:bg-accent/10 text-accent-foreground font-semibold gap-1.5 shadow-sm text-xs md:text-sm"
+              title="Gera a Procuração Específica de Homologação GD em PDF pronta para assinatura digital do cliente (Gov.br / Clicksign)"
+            >
+              <FileText className="w-4 h-4 text-accent" />
+              📄 Gerar Procuração GD
+            </Button>
+            <Button
+              type="button"
+              onClick={handleGenerateUtilityAccessForm}
+              variant="outline"
+              className="border-brand-500/40 hover:bg-brand-500/10 text-brand-700 dark:text-brand-300 font-bold gap-2 shadow-sm text-xs md:text-sm"
+              title={`Gera o formulário oficial de solicitação de acesso para ${getUtilityShortLabel(data.technical.utility)}`}
+            >
+              <FileSpreadsheet className="w-4 h-4 text-brand-500" />
+              📄 Gerar Formulário de Acesso ({getUtilityShortLabel(data.technical.utility)})
+            </Button>
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -389,14 +438,27 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
 
       {/* Engineer */}
       <section className="bg-card p-6 rounded-lg shadow-sm border border-border">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Responsável Técnico</h2>
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+          <h2 className="text-lg font-semibold text-foreground">Responsável Técnico & Empresa Integradora</h2>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={handleLoadCompanyProfile}
+            className="text-xs border-brand-500/40 text-brand-600 dark:text-brand-300 hover:bg-brand-500/10 gap-1.5"
+            title="Preenche os dados do engenheiro e empresa a partir do perfil salvo"
+          >
+            <Building2 className="w-3.5 h-3.5 text-brand-500" />
+            🏢 Preencher Dados da Empresa / RT
+          </Button>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className={labelClass}>Nome do Engenheiro</label>
+            <label className={labelClass}>Nome do Engenheiro / RT</label>
             <input type="text" className={inputClass} value={data.engineer?.name || ''} onChange={e => onChange({ ...data, engineer: { ...data.engineer, name: e.target.value } })} />
           </div>
           <div>
-            <label className={labelClass}>Nº CREA</label>
+            <label className={labelClass}>Nº CREA / CFT</label>
             <input type="text" className={inputClass} value={data.engineer?.crea || ''} onChange={e => onChange({ ...data, engineer: { ...data.engineer, crea: e.target.value } })} />
           </div>
         </div>

@@ -136,6 +136,32 @@ export interface CreditBeneficiary {
   averageConsumptionKwh?: number;
 }
 
+export interface LegalRepresentative {
+  name: string;
+  cpf: string;
+  rg: string;
+  rgIssuer?: string;
+  qualification: string; // Ex: 'Engenheiro Eletricista', 'Técnico em Eletrotécnica'
+  creaCft: string;
+  creaState: string;
+  rnp?: string;
+  email: string;
+  phone: string;
+}
+
+export interface CompanyProfile {
+  companyName: string;
+  tradeName: string;
+  cnpj: string;
+  stateRegistration?: string;
+  email: string;
+  phone: string;
+  address: Address;
+  legalRepresentative: LegalRepresentative;
+  defaultUtility?: UtilityCompany;
+  defaultArtType?: 'OBRA_SERVICO' | 'CARGO_FUNCAO' | 'MULTIPLA';
+}
+
 export interface ProjectState {
   client: ClientData;
   engineer: EngineerData;
@@ -144,4 +170,6 @@ export interface ProjectState {
   creditBeneficiaries?: CreditBeneficiary[];
   gdType?: GDType;
   paperSize: string;
+  companyProfile?: CompanyProfile;
 }
+

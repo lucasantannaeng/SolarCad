@@ -10,10 +10,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { supabase } from '@/integrations/supabase/client';
 import { SavedProjects } from '@/components/SavedProjects';
-import { Sun, LayoutDashboard, Archive, Save, Loader2, LogOut, Database, FolderOpen, Settings } from 'lucide-react';
+import { Sun, LayoutDashboard, Archive, Save, Loader2, LogOut, Database, FolderOpen, Settings, Building2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ConfigModal } from '@/components/ConfigModal';
+import { CompanyProfileModal } from '@/components/CompanyProfileModal';
+import { useCompanyProfile } from '@/hooks/useCompanyProfile';
 
 const createDefaultBlock = (id: number, module = DEFAULT_MODULE, inverter = DEFAULT_INVERTER): EquipmentBlock => ({
   id,
@@ -49,9 +51,25 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<'form' | 'diagram' | 'projects'>('form');
   const [saving, setSaving] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
+  const [companyModalOpen, setCompanyModalOpen] = useState(false);
   const { modules, inverters, loading } = useEquipment();
+  const { profile: companyProfile } = useCompanyProfile();
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdmin();
+
+  // Injeta perfil da empresa e responsável técnico no projeto atual se ainda não preenchido
+  useEffect(() => {
+    if (companyProfile?.legalRepresentative?.name && !projectData.engineer?.name) {
+      setProjectData(prev => ({
+        ...prev,
+        engineer: {
+          name: companyProfile.legalRepresentative.name,
+          crea: `${companyProfile.legalRepresentative.creaCft}/${companyProfile.legalRepresentative.creaState}`,
+        },
+        companyProfile: companyProfile,
+      }));
+    }
+  }, [companyProfile]);
 
   useEffect(() => {
     if (modules.length > 0 && inverters.length > 0 && projectData.equipmentBlocks[0]?.moduleId === 0) {
@@ -169,6 +187,9 @@ const Index = () => {
               {saving ? <Loader2 size={19} className="animate-spin" /> : <Save size={19} />}
               Salvar Projeto
             </button>
+            <button onClick={() => setCompanyModalOpen(true)} className="w-full flex items-center gap-3 px-4 py-3 text-brand-200 hover:bg-brand-800/70 hover:text-white rounded-lg transition-colors font-medium text-sm">
+              <Building2 size={19} /> Empresa & Procurador
+            </button>
             <button onClick={() => setConfigOpen(true)} className="w-full flex items-center gap-3 px-4 py-3 text-brand-200 hover:bg-brand-800/70 hover:text-white rounded-lg transition-colors font-medium text-sm">
               <Settings size={19} /> Conexão & IA
             </button>
@@ -201,13 +222,22 @@ const Index = () => {
               {activeTab === 'form' ? 'Preencha os dados e adicione múltiplos conjuntos de inversores.' : activeTab === 'diagram' ? 'Diagrama com múltiplos inversores e barramento CA.' : 'Gerencie e carregue seus projetos salvos.'}
             </p>
           </div>
-          <button
-            onClick={() => setConfigOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-muted hover:bg-muted/80 text-foreground rounded-lg border border-border transition-all"
-            title="Configurar Supabase & Chaves de IA"
-          >
-            <Settings className="w-3.5 h-3.5 text-brand-500" /> Configurações / IA
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCompanyModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-brand-500/10 hover:bg-brand-500/20 text-brand-500 rounded-lg border border-brand-500/30 transition-all"
+              title="Cadastro da Empresa Integradora e Procurador Legal"
+            >
+              <Building2 className="w-3.5 h-3.5 text-brand-500" /> Empresa & Procurador
+            </button>
+            <button
+              onClick={() => setConfigOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-muted hover:bg-muted/80 text-foreground rounded-lg border border-border transition-all"
+              title="Configurar Supabase & Chaves de IA"
+            >
+              <Settings className="w-3.5 h-3.5 text-brand-500" /> Configurações / IA
+            </button>
+          </div>
         </header>
         <div className="p-6 max-w-6xl mx-auto">
           {activeTab === 'form' ? (
@@ -222,8 +252,24 @@ const Index = () => {
         </div>
       </main>
 
-      {/* Modal de Configuração de Credenciais / IA para quem clonar */}
+      {/* Modal de Configuração de Credenciais / IA */}
       <ConfigModal open={configOpen} onOpenChange={setConfigOpen} />
+
+      {/* Modal de Cadastro da Empresa Integradora e Procurador Legal */}
+      <CompanyProfileModal
+        open={companyModalOpen}
+        onOpenChange={setCompanyModalOpen}
+        onProfileUpdated={(updatedProfile) => {
+          setProjectData(prev => ({
+            ...prev,
+            companyProfile: updatedProfile,
+            engineer: updatedProfile.legalRepresentative?.name ? {
+              name: updatedProfile.legalRepresentative.name,
+              crea: `${updatedProfile.legalRepresentative.creaCft}/${updatedProfile.legalRepresentative.creaState}`,
+            } : prev.engineer,
+          }));
+        }}
+      />
     </div>
   );
 };

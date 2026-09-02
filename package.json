@@ -5,6 +5,7 @@
   "author": "Luca Rodrigues Gomes de Sant'Anna <lucasantannaeng@gmail.com>",
   "license": "MIT",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
