@@ -4,7 +4,6 @@
   "description": "SolarCAD — Suíte Profissional de Homologação GD para Engenharia Fotovoltaica",
   "author": "Luca Rodrigues Gomes de Sant'Anna <lucasantannaeng@gmail.com>",
   "license": "MIT",
-  "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
     "dev": "vite",
