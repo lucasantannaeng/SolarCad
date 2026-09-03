@@ -5,14 +5,19 @@ import { getProjectEngineeringStatus } from '@/services/engineering';
 import { ocrEnergyBill, generateJustification, OcrResult } from '@/services/aiService';
 import { validateCreditDistribution, distributeCreditsEqually, estimateMonthlyGeneration } from '@/services/creditDistribution';
 import { downloadEnelRateioPDF, downloadEnelRateioExcel } from '@/services/enelFormService';
+import { downloadCreditMatrixPDF, downloadCreditMatrixExcel } from '@/services/creditMatrixService';
+import { validateProjectPreFlight } from '@/services/preFlightValidator';
 import { downloadEnelAccessFormPDF } from '@/services/enelAccessFormService';
 import { downloadLightFormPDF } from '@/services/lightFormService';
 import { downloadCerciFormPDF } from '@/services/cerciFormService';
 import { downloadEnergisaFormPDF } from '@/services/energisaFormService';
 import { downloadPowerOfAttorneyPDF } from '@/services/powerOfAttorneyService';
-import { useCompanyProfile } from '@/hooks/useCompanyProfile';
+import { useCompanyProfile, formatCEP, formatPhone, formatCPF, formatCNPJ } from '@/hooks/useCompanyProfile';
+import { fetchCepData } from '@/services/cepService';
 import { EquipmentBlockForm } from './EquipmentBlockForm';
-import { AlertTriangle, CheckCircle, FileText, Zap, Plus, ScanLine, Loader2, Sparkles, Share2, Trash2, Users, Percent, FileSpreadsheet, Building2, Download } from 'lucide-react';
+import { ArtGuideModal } from './ArtGuideModal';
+import { PreFlightAuditModal } from './PreFlightAuditModal';
+import { AlertTriangle, CheckCircle, FileText, Zap, Plus, ScanLine, Loader2, Sparkles, Share2, Trash2, Users, Percent, FileSpreadsheet, Building2, Download, Award, ShieldCheck, MapPin, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InfoTrigger } from '@/components/InfoTrigger';
 import { toast } from 'sonner';
@@ -37,6 +42,9 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
   const [justificationLoading, setJustificationLoading] = useState(false);
   const [justification, setJustification] = useState('');
   const [showWarningModal, setShowWarningModal] = useState(false);
+  const [artGuideOpen, setArtGuideOpen] = useState(false);
+  const [preFlightOpen, setPreFlightOpen] = useState(false);
+  const [cepLoading, setCepLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const updateClient = (field: string, value: string) => {
@@ -45,6 +53,53 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
 
   const updateAddress = (field: string, value: string) => {
     onChange({ ...data, client: { ...data.client, address: { ...data.client.address, [field]: value } } });
+  };
+
+  const handleCepSearch = async (cepOverride?: string) => {
+    const rawCep = cepOverride !== undefined ? cepOverride : (data.client.address.zipCode || '');
+    const clean = rawCep.replace(/\D/g, '');
+    if (clean.length !== 8) {
+      toast.warning('Digite um CEP válido com 8 dígitos para consultar.');
+      return;
+    }
+
+    setCepLoading(true);
+    try {
+      const result = await fetchCepData(clean);
+      if (result) {
+        onChange({
+          ...data,
+          client: {
+            ...data.client,
+            address: {
+              ...data.client.address,
+              zipCode: result.zipCode,
+              street: result.street || data.client.address.street,
+              neighborhood: result.neighborhood || data.client.address.neighborhood,
+              city: result.city || data.client.address.city,
+              state: result.state || data.client.address.state || 'RJ',
+              complement: result.complement || data.client.address.complement || '',
+            },
+          },
+        });
+        toast.success(`Endereço localizado: ${result.street ? result.street + ', ' : ''}${result.neighborhood ? result.neighborhood + ' - ' : ''}${result.city}/${result.state}`);
+      } else {
+        toast.error('CEP não localizado nas bases nacionais (BrasilAPI / ViaCEP). Preencha manualmente.');
+      }
+    } catch (err: any) {
+      toast.error(`Falha ao consultar CEP: ${err.message || 'Erro de conexão'}`);
+    } finally {
+      setCepLoading(false);
+    }
+  };
+
+  const handleCepChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCEP(e.target.value);
+    updateAddress('zipCode', formatted);
+    const clean = formatted.replace(/\D/g, '');
+    if (clean.length === 8 && !cepLoading) {
+      handleCepSearch(formatted);
+    }
   };
 
   const updateTechnical = (field: string, value: any) => {
@@ -69,6 +124,10 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
       inverterBrand: defaultInv.brand, inverterModel: defaultInv.model, inverterPowerKw: defaultInv.power,
       moduleBrand: defaultMod.brand, moduleModel: defaultMod.model, modulePowerW: defaultMod.power,
       moduleQty: 0, inverterQty: 1, strings: [{ id: 1, count: 0 }],
+      structureType: 'CERAMIC',
+      roofPlaneName: `Água ${newId} (Norte - Telhado Principal)`,
+      azimuth: 0,
+      tilt: 15,
     };
     onChange({ ...data, equipmentBlocks: [...data.equipmentBlocks, newBlock] });
   };
@@ -173,6 +232,26 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
     } catch (err: any) {
       console.error('Enel Excel error:', err);
       toast.error(`Erro ao gerar planilha de rateio Enel: ${err.message}`);
+    }
+  };
+
+  const handleExportCreditMatrix = () => {
+    try {
+      const fileName = downloadCreditMatrixPDF(data);
+      toast.success(`Matriz de Rateio (${getUtilityShortLabel(data.technical.utility)}) gerada em PDF: ${fileName}`);
+    } catch (err: any) {
+      console.error('Matrix PDF error:', err);
+      toast.error(`Erro ao gerar matriz de rateio: ${err.message}`);
+    }
+  };
+
+  const handleExportCreditMatrixExcel = async () => {
+    try {
+      const fileName = await downloadCreditMatrixExcel(data);
+      toast.success(`Planilha de Rateio (${getUtilityShortLabel(data.technical.utility)}) gerada em Excel: ${fileName}`);
+    } catch (err: any) {
+      console.error('Matrix Excel error:', err);
+      toast.error(`Erro ao gerar planilha de rateio: ${err.message}`);
     }
   };
 
@@ -393,45 +472,258 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
 
       {/* Client */}
       <section className="bg-card p-6 rounded-lg shadow-sm border border-border">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Dados do Cliente</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+          <Users className="w-5 h-5 text-brand-500" />
+          Dados do Cliente / Titular da UC
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-3">
-            <label className={labelClass}>Nome Completo</label>
-            <input type="text" className={inputClass} value={data.client.name} onChange={e => updateClient('name', e.target.value)} />
+            <label className={labelClass}>Nome Completo / Razão Social</label>
+            <input
+              type="text"
+              placeholder="Ex: Maria Antônia Pereira ou Empresa Ltda"
+              className={inputClass}
+              value={data.client.name}
+              onChange={e => updateClient('name', e.target.value)}
+            />
           </div>
           <div>
             <label className={labelClass}>CPF / CNPJ</label>
-            <input type="text" className={inputClass} value={data.client.document} onChange={e => updateClient('document', e.target.value)} />
+            <input
+              type="text"
+              placeholder="000.000.000-00 ou 00.000.000/0000-00"
+              className={inputClass}
+              value={data.client.document}
+              onChange={e => {
+                const raw = e.target.value;
+                const clean = raw.replace(/\D/g, '');
+                const formatted = clean.length > 11 ? formatCNPJ(raw) : (clean.length > 0 ? formatCPF(raw) : raw);
+                updateClient('document', formatted);
+              }}
+            />
           </div>
           <div>
             <label className={labelClass}>Email</label>
-            <input type="email" className={inputClass} value={data.client.email} onChange={e => updateClient('email', e.target.value)} />
+            <input
+              type="email"
+              placeholder="cliente@email.com"
+              className={inputClass}
+              value={data.client.email}
+              onChange={e => updateClient('email', e.target.value)}
+            />
           </div>
           <div>
-            <label className={labelClass}>Nº ART <InfoTrigger helpKey="art" size={12} /></label>
-            <input type="text" className={inputClass} value={data.client.art || ''} onChange={e => updateClient('art', e.target.value)} />
+            <label className={labelClass}>Telefone / WhatsApp</label>
+            <input
+              type="text"
+              placeholder="(21) 99999-8888"
+              className={inputClass}
+              value={data.client.phone || ''}
+              onChange={e => updateClient('phone', formatPhone(e.target.value))}
+            />
+          </div>
+          <div className="md:col-span-3">
+            <label className={labelClass}>Nº ART / TRT <InfoTrigger helpKey="art" size={12} /></label>
+            <input
+              type="text"
+              placeholder="Ex: ART-2026-123456 ou TRT-2026-789012"
+              className={inputClass}
+              value={data.client.art || ''}
+              onChange={e => updateClient('art', e.target.value)}
+            />
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+      </section>
+
+      {/* Installation Address / Site Location */}
+      <section className="bg-card p-6 rounded-lg shadow-sm border border-border space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-brand-500" />
+              Endereço da Instalação / Local da Obra
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Endereço físico onde a usina fotovoltaica será instalada e vistoriada pela equipe técnica da distribuidora.
+            </p>
+          </div>
+        </div>
+
+        {/* Card/Banner Normativo de Alerta */}
+        {(() => {
+          const street = data.client.address?.street?.trim() || '';
+          const num = data.client.address?.number?.trim() || '';
+          const neigh = data.client.address?.neighborhood?.trim() || '';
+          const cit = data.client.address?.city?.trim() || '';
+          const zip = data.client.address?.zipCode?.trim() || '';
+          const comp = data.client.address?.complement?.trim() || '';
+          const isAddrComplete = Boolean(street && num && neigh && cit && zip);
+
+          const missing: string[] = [];
+          if (!zip) missing.push('CEP');
+          if (!street) missing.push('Logradouro');
+          if (!num) missing.push('Número');
+          if (!neigh) missing.push('Bairro');
+          if (!cit) missing.push('Cidade');
+
+          if (!isAddrComplete) {
+            return (
+              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 font-bold text-sm text-amber-800 dark:text-amber-300">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                    <span>Normas de Atendimento das Distribuidoras (Enel RJ CNC-GD, Light RECON-BT, Energisa NDU-013, CERCI)</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                    Aviso Normativo
+                  </span>
+                </div>
+
+                <div className="space-y-1 text-xs">
+                  <p className="font-semibold text-amber-800 dark:text-amber-200">
+                    ⚠️ Endereço incompleto. Concessionárias exigem Logradouro, Número, Bairro, Cidade e CEP para abrir a ordem de serviço de vistoria.
+                  </p>
+                  <p className="text-muted-foreground text-[11px]">
+                    <span className="font-medium text-foreground">Ação Recomendada:</span> Complete o endereço da obra com CEP e Cidade antes do protocolo.
+                  </p>
+                  {missing.length > 0 && (
+                    <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                      <span className="text-[11px] text-muted-foreground font-medium">Campos pendentes:</span>
+                      {missing.map((field) => (
+                        <span key={field} className="px-1.5 py-0.5 rounded bg-amber-200/50 dark:bg-amber-900/50 text-amber-900 dark:text-amber-200 font-mono text-[10px] font-bold">
+                          {field}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200 text-xs space-y-1.5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2 font-bold text-sm text-emerald-800 dark:text-emerald-300">
+                  <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>Normas de Atendimento das Distribuidoras (Enel RJ CNC-GD, Light RECON-BT, Energisa NDU-013, CERCI)</span>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                  ✓ Endereço Conforme com Normas das Concessionárias
+                </span>
+              </div>
+              <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                Endereço validado: {street}, {num}{comp ? ` (${comp})` : ''} - {neigh}, {cit}/{data.client.address?.state || 'RJ'} - CEP: {zip}.
+              </p>
+            </div>
+          );
+        })()}
+
+        {/* Address Input Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          {/* CEP com Busca Automática */}
           <div className="md:col-span-2">
-            <label className={labelClass}>Logradouro</label>
-            <input type="text" className={inputClass} value={data.client.address.street} onChange={e => updateAddress('street', e.target.value)} />
+            <label className={labelClass}>CEP</label>
+            <div className="flex gap-2 mt-1">
+              <input
+                type="text"
+                placeholder="00000-000"
+                className="block w-full rounded-md border border-input bg-card text-card-foreground shadow-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 p-2 text-sm font-mono"
+                value={data.client.address?.zipCode || ''}
+                onChange={handleCepChange}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleCepSearch();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => handleCepSearch()}
+                disabled={cepLoading}
+                className="shrink-0 text-xs gap-1 border-brand-500/50 hover:bg-brand-500/10 text-brand-600 dark:text-brand-300"
+                title="Buscar dados do endereço via CEP"
+              >
+                {cepLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                Buscar CEP
+              </Button>
+            </div>
           </div>
-          <div>
+
+          {/* Logradouro */}
+          <div className="md:col-span-4">
+            <label className={labelClass}>Logradouro (Rua, Av, Rodovia, Estrada)</label>
+            <input
+              type="text"
+              placeholder="Ex: Av. Atlântica ou Rua Principal"
+              className={inputClass}
+              value={data.client.address?.street || ''}
+              onChange={e => updateAddress('street', e.target.value)}
+            />
+          </div>
+
+          {/* Número */}
+          <div className="md:col-span-2">
             <label className={labelClass}>Número</label>
-            <input type="text" className={inputClass} value={data.client.address.number} onChange={e => updateAddress('number', e.target.value)} />
+            <input
+              type="text"
+              placeholder="Ex: 1500 ou S/N"
+              className={inputClass}
+              value={data.client.address?.number || ''}
+              onChange={e => updateAddress('number', e.target.value)}
+            />
           </div>
-          <div>
+
+          {/* Complemento */}
+          <div className="md:col-span-4">
+            <label className={labelClass}>Complemento (Opcional)</label>
+            <input
+              type="text"
+              placeholder="Ex: Apto 101, Bloco 2, Galpão 3, Casa A, Lote 14"
+              className={inputClass}
+              value={data.client.address?.complement || ''}
+              onChange={e => updateAddress('complement', e.target.value)}
+            />
+          </div>
+
+          {/* Bairro */}
+          <div className="md:col-span-2">
             <label className={labelClass}>Bairro</label>
-            <input type="text" className={inputClass} value={data.client.address.neighborhood} onChange={e => updateAddress('neighborhood', e.target.value)} />
+            <input
+              type="text"
+              placeholder="Ex: Copacabana"
+              className={inputClass}
+              value={data.client.address?.neighborhood || ''}
+              onChange={e => updateAddress('neighborhood', e.target.value)}
+            />
           </div>
-          <div>
+
+          {/* Cidade */}
+          <div className="md:col-span-3">
             <label className={labelClass}>Cidade</label>
-            <input type="text" className={inputClass} value={data.client.address.city} onChange={e => updateAddress('city', e.target.value)} />
+            <input
+              type="text"
+              placeholder="Ex: Rio de Janeiro"
+              className={inputClass}
+              value={data.client.address?.city || ''}
+              onChange={e => updateAddress('city', e.target.value)}
+            />
           </div>
-          <div>
-            <label className={labelClass}>Estado</label>
-            <input type="text" className={inputClass} value={data.client.address.state} onChange={e => updateAddress('state', e.target.value)} />
+
+          {/* Estado / UF */}
+          <div className="md:col-span-1">
+            <label className={labelClass}>Estado (UF)</label>
+            <input
+              type="text"
+              maxLength={2}
+              placeholder="RJ"
+              className={`${inputClass} uppercase text-center font-mono font-bold`}
+              value={data.client.address?.state || 'RJ'}
+              onChange={e => updateAddress('state', e.target.value.toUpperCase())}
+            />
           </div>
         </div>
       </section>
@@ -584,26 +876,53 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              onClick={handleExportEnelRateio}
-              variant="outline"
-              size="sm"
-              className="bg-brand-50 hover:bg-brand-100 text-brand-800 border-brand-300 dark:bg-brand-950 dark:text-brand-300 dark:border-brand-800 text-xs font-bold gap-1.5 shadow-sm"
-              title="Gera o formulário oficial de rateio da Enel RJ em PDF conforme a Lei 14.300"
-            >
-              <FileSpreadsheet size={15} className="text-brand-600 dark:text-brand-400" />
-              Formulário ENEL RJ (PDF)
-            </Button>
-            <Button
-              onClick={handleExportEnelRateioExcel}
-              variant="outline"
-              size="sm"
-              className="border-emerald-500/40 hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-xs font-bold gap-1.5 shadow-sm"
-              title="Preenche e exporta a planilha Excel oficial da Enel RJ (.xlsm)"
-            >
-              <Download size={15} className="text-emerald-600 dark:text-emerald-400" />
-              Planilha ENEL RJ (.xlsm)
-            </Button>
+            {data.technical.utility === UtilityCompany.ENEL_RJ ? (
+              <>
+                <Button
+                  onClick={handleExportEnelRateio}
+                  variant="outline"
+                  size="sm"
+                  className="bg-brand-50 hover:bg-brand-100 text-brand-800 border-brand-300 dark:bg-brand-950 dark:text-brand-300 dark:border-brand-800 text-xs font-bold gap-1.5 shadow-sm"
+                  title="Gera o formulário oficial de rateio da Enel RJ em PDF conforme a Lei 14.300"
+                >
+                  <FileSpreadsheet size={15} className="text-brand-600 dark:text-brand-400" />
+                  Formulário ENEL RJ (PDF)
+                </Button>
+                <Button
+                  onClick={handleExportEnelRateioExcel}
+                  variant="outline"
+                  size="sm"
+                  className="border-emerald-500/40 hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-xs font-bold gap-1.5 shadow-sm"
+                  title="Preenche e exporta a planilha Excel oficial da Enel RJ (.xlsm)"
+                >
+                  <Download size={15} className="text-emerald-600 dark:text-emerald-400" />
+                  Planilha ENEL RJ (.xlsm)
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  onClick={handleExportCreditMatrix}
+                  variant="outline"
+                  size="sm"
+                  className="bg-brand-50 hover:bg-brand-100 text-brand-800 border-brand-300 dark:bg-brand-950 dark:text-brand-300 dark:border-brand-800 text-xs font-bold gap-1.5 shadow-sm"
+                  title={`Gera a Matriz de Rateio oficial (${getUtilityShortLabel(data.technical.utility)}) em PDF`}
+                >
+                  <FileSpreadsheet size={15} className="text-brand-600 dark:text-brand-400" />
+                  Matriz {getUtilityShortLabel(data.technical.utility)} (PDF)
+                </Button>
+                <Button
+                  onClick={handleExportCreditMatrixExcel}
+                  variant="outline"
+                  size="sm"
+                  className="border-emerald-500/40 hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-xs font-bold gap-1.5 shadow-sm"
+                  title={`Gera a Planilha Excel de Rateio (${getUtilityShortLabel(data.technical.utility)})`}
+                >
+                  <Download size={15} className="text-emerald-600 dark:text-emerald-400" />
+                  Planilha {getUtilityShortLabel(data.technical.utility)} (.xlsx)
+                </Button>
+              </>
+            )}
             {beneficiaries.length > 0 && (
               <Button
                 variant="outline"
@@ -852,18 +1171,44 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
       <div className="flex justify-end items-center gap-3 pt-4 flex-wrap">
         <Button
           type="button"
+          onClick={() => setArtGuideOpen(true)}
+          variant="outline"
+          className="border-amber-500/40 hover:bg-amber-500/10 text-amber-700 dark:text-amber-300 font-bold px-4 py-2.5 shadow-sm text-sm flex items-center gap-2"
+          title="Guia Rápido de Preenchimento de ART (CREA) e TRT (CFT)"
+        >
+          <Award size={18} className="text-amber-500" />
+          📋 Guia ART / TRT (CREA & CFT)
+        </Button>
+
+        <Button
+          type="button"
+          onClick={() => setPreFlightOpen(true)}
+          variant="outline"
+          className="border-blue-500/40 hover:bg-blue-500/10 text-blue-700 dark:text-blue-300 font-bold px-4 py-2.5 shadow-sm text-sm flex items-center gap-2"
+          title="Auditoria Técnica Pré-Protocolo (Checklist Anti-Exigência)"
+        >
+          <ShieldCheck size={18} className="text-blue-500" />
+          🛡️ Auditoria Pré-Protocolo
+        </Button>
+
+        <Button
+          type="button"
           onClick={handleGenerateUtilityAccessForm}
           variant="outline"
           className="border-brand-500/40 hover:bg-brand-500/10 text-brand-700 dark:text-brand-300 font-bold px-4 py-2.5 shadow-sm text-sm flex items-center gap-2"
           title={`Gera o formulário oficial de solicitação de acesso para ${getUtilityShortLabel(data.technical.utility)}`}
         >
           <FileSpreadsheet size={18} className="text-brand-500" />
-          📄 Gerar Formulário de Acesso ({getUtilityShortLabel(data.technical.utility)})
+          📄 Formulário de Acesso ({getUtilityShortLabel(data.technical.utility)})
         </Button>
+
         <button
           onClick={() => {
-            const hasIssues = engResult.overallStatus !== 'SUCCESS';
-            if (hasIssues) {
+            const preFlight = validateProjectPreFlight(data);
+            if (!preFlight.canProtocol) {
+              setPreFlightOpen(true);
+              toast.error('Exigências críticas detectadas no pré-protocolo. Revise antes de emitir!');
+            } else if (engResult.overallStatus !== 'SUCCESS') {
               setShowWarningModal(true);
             } else {
               onGenerate();
@@ -875,6 +1220,27 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
           Gerar Memorial Descritivo (PDF)
         </button>
       </div>
+
+      {/* Guia ART / TRT Modal */}
+      <ArtGuideModal
+        open={artGuideOpen}
+        onOpenChange={setArtGuideOpen}
+        project={data}
+      />
+
+      {/* Pre-Flight Audit Modal */}
+      <PreFlightAuditModal
+        open={preFlightOpen}
+        onOpenChange={setPreFlightOpen}
+        project={data}
+        onProceedAnyway={() => {
+          if (engResult.overallStatus !== 'SUCCESS') {
+            setShowWarningModal(true);
+          } else {
+            onGenerate();
+          }
+        }}
+      />
 
       {/* Warning Modal */}
       <Dialog open={showWarningModal} onOpenChange={setShowWarningModal}>

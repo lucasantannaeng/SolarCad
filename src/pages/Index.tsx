@@ -25,6 +25,10 @@ const createDefaultBlock = (id: number, module = DEFAULT_MODULE, inverter = DEFA
   moduleBrand: module.brand, moduleModel: module.model, modulePowerW: module.power,
   moduleQty: 0, inverterQty: 1,
   strings: [{ id: 1, count: 0 }],
+  structureType: 'CERAMIC',
+  roofPlaneName: `Água ${id} (Norte - Telhado Principal)`,
+  azimuth: 0,
+  tilt: 15,
 });
 
 const INITIAL_PROJECT_STATE: ProjectState = {
@@ -170,7 +174,7 @@ const Index = () => {
             <Sun className="w-8 h-8 text-accent animate-pulse" />
             <div>
               <h1 className="font-bold text-lg leading-tight text-primary-foreground">SolarCAD</h1>
-              <span className="text-xs text-brand-200 opacity-75">Homologação GD</span>
+              <span className="text-xs text-brand-200 opacity-90 font-medium">Homologação GD • v1.3.0</span>
             </div>
           </div>
           <nav className="p-4 space-y-2 flex-1">
@@ -209,6 +213,9 @@ const Index = () => {
           <button onClick={signOut} className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-brand-200 hover:bg-brand-800 hover:text-white rounded-lg transition-colors">
             <LogOut size={14} /> Sair
           </button>
+          <div className="text-[10px] text-brand-300/50 text-center font-mono pt-1">
+            SolarCAD Desktop v1.3.0
+          </div>
         </div>
       </aside>
 
@@ -239,12 +246,12 @@ const Index = () => {
             </button>
           </div>
         </header>
-        <div className="p-6 max-w-6xl mx-auto">
+        <div className={activeTab === 'diagram' ? "p-4 md:p-6 w-full max-w-[1600px] mx-auto" : "p-6 max-w-6xl mx-auto"}>
           {activeTab === 'form' ? (
             <ProjectForm data={projectData} onChange={setProjectData} onGenerate={() => generateMemorialPDF(projectData)} modules={modules} inverters={inverters} />
           ) : activeTab === 'diagram' ? (
-            <div className="bg-card p-6 rounded-lg shadow border border-border">
-              <DiagramCanvas projectData={projectData} />
+            <div className="bg-card p-4 md:p-6 rounded-lg shadow border border-border">
+              <DiagramCanvas projectData={projectData} onProjectChange={setProjectData} />
             </div>
           ) : (
             <SavedProjects onLoadProject={(data) => { setProjectData(data); setActiveTab('form'); }} />

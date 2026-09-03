@@ -1,9 +1,9 @@
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { ProjectState, CompanyProfile } from '@/types';
 
 /**
- * Gera o documento formal em PDF de Procuração Específica para Homologação GD (Lei 14.300 / REN 1.000 ANEEL)
+ * Gera o documento formal em PDF de Procuração Específica para Homologação GD
+ * Padrão Jurídico Executivo ABNT / Lei 14.300/2022 e REN ANEEL 1.000/2021
  */
 export function generatePowerOfAttorneyPDF(
   project: ProjectState,
@@ -17,7 +17,7 @@ export function generatePowerOfAttorneyPDF(
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 18;
+  const margin = 16;
   const contentWidth = pageWidth - margin * 2;
 
   const client = project.client;
@@ -33,159 +33,282 @@ export function generatePowerOfAttorneyPDF(
 
   const utilityFull = utilityNames[utility] || utility || 'CONCESSIONÁRIA LOCAL DE ENERGIA ELÉTRICA';
 
-  // --- Cabeçalho Corporativo ---
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 1. CABEÇALHO EXECUTIVO INSTITUCIONAL
+  // ─────────────────────────────────────────────────────────────────────────────
   doc.setFillColor(15, 23, 42); // Slate 900
-  doc.rect(0, 0, pageWidth, 28, 'F');
+  doc.rect(0, 0, pageWidth, 26, 'F');
+
+  // Friso dourado / âmbar decorativo
+  doc.setFillColor(217, 119, 6); // Amber 600
+  doc.rect(0, 26, pageWidth, 1.2, 'F');
 
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text('INSTRUMENTO PARTICULAR DE PROCURAÇÃO', pageWidth / 2, 12, { align: 'center' });
+  doc.setFontSize(13);
+  doc.text('INSTRUMENTO PARTICULAR DE PROCURAÇÃO ESPECÍFICA', pageWidth / 2, 10.5, { align: 'center' });
 
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
+  doc.setTextColor(226, 232, 240); // Slate 200
+  doc.text('HOMOLOGAÇÃO DE MICROGERAÇÃO / MINIGERAÇÃO DISTRIBUÍDA SOLAR FOTOVOLTAICA', pageWidth / 2, 16.5, { align: 'center' });
+
+  doc.setFontSize(7.5);
   doc.setTextColor(203, 213, 225); // Slate 300
-  doc.text('HOMOLOGAÇÃO DE MICROGERAÇÃO / MINIGERAÇÃO DISTRIBUÍDA — LEI 14.300/2022', pageWidth / 2, 19, { align: 'center' });
-  doc.text('RESOLUÇÃO NORMATIVA ANEEL Nº 1.000/2021', pageWidth / 2, 24, { align: 'center' });
+  doc.text('LEI FEDERAL Nº 14.300/2022 • RESOLUÇÃO NORMATIVA ANEEL Nº 1.000/2021', pageWidth / 2, 21.5, { align: 'center' });
 
-  let y = 36;
+  let y = 33;
 
-  // --- Seção 1: OUTORGANTE (Titular da UC / Cliente) ---
-  doc.setTextColor(15, 23, 42);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('1. OUTORGANTE (TITULAR DA UNIDADE CONSUMIDORA):', margin, y);
-  y += 4;
-
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 2. SEÇÃO 1: OUTORGANTE (TITULAR DA UNIDADE CONSUMIDORA)
+  // ─────────────────────────────────────────────────────────────────────────────
+  const cardPad = 3.5;
   const clientAddressStr = client.address
-    ? `${client.address.street || 'Logradouro'}, nº ${client.address.number || 'S/N'}, ${client.address.neighborhood || ''}, ${client.address.city || ''} - ${client.address.state || 'RJ'}, CEP: ${client.address.zipCode || ''}`
+    ? `${client.address.street || 'Logradouro'}, nº ${client.address.number || 'S/N'}${client.address.complement ? `, ${client.address.complement}` : ''}, ${client.address.neighborhood || ''}, ${client.address.city || ''} - ${client.address.state || 'RJ'}, CEP: ${client.address.zipCode || 'Não informado'}`
     : 'Não informado';
 
-  autoTable(doc, {
-    startY: y,
-    margin: { left: margin, right: margin },
-    theme: 'grid',
-    headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
-    bodyStyles: { fontSize: 8.5, textColor: [30, 41, 59] },
-    body: [
-      [
-        { content: `Nome/Razão Social: ${client.name || 'Não informado'}`, colSpan: 2 },
-        { content: `CPF/CNPJ: ${client.document || 'Não informado'}` },
-      ],
-      [
-        { content: `Código do Cliente / UC: ${client.utilityId || 'A definir'}`, colSpan: 1 },
-        { content: `Telefone: ${client.phone || 'Não informado'}` },
-        { content: `E-mail: ${client.email || 'Não informado'}` },
-      ],
-      [
-        { content: `Endereço da Instalação: ${clientAddressStr}`, colSpan: 3 },
-      ],
-    ],
-  });
-
-  y = (doc as any).lastAutoTable.finalY + 8;
-
-  // --- Seção 2: OUTORGADOS (Empresa Integradora & Procurador Legal) ---
+  // Título da Seção
+  doc.setTextColor(15, 23, 42);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
+  doc.setFontSize(9.5);
+  doc.text('1. OUTORGANTE (TITULAR DA UNIDADE CONSUMIDORA):', margin, y);
+  y += 3.5;
+
+  // Card do Outorgante
+  const card1H = 25;
+  doc.setFillColor(248, 250, 252); // Slate 50
+  doc.setDrawColor(203, 213, 225); // Slate 300
+  doc.setLineWidth(0.3);
+  doc.roundedRect(margin, y, contentWidth, card1H, 1.5, 1.5, 'FD');
+
+  let cy = y + cardPad + 2.5;
+
+  // Linha 1: Nome e CPF/CNPJ
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Nome / Razão Social: ', margin + cardPad, cy);
+  const nameW = doc.getTextWidth('Nome / Razão Social: ');
+  doc.setFont('helvetica', 'normal');
+  doc.text(client.name || 'Não informado', margin + cardPad + nameW, cy);
+
+  const docLabel = 'CPF / CNPJ: ';
+  const docVal = client.document || 'Não informado';
+  const docW = doc.getTextWidth(docLabel + docVal);
+  doc.setFont('helvetica', 'bold');
+  doc.text(docLabel, margin + contentWidth - cardPad - docW, cy);
+  doc.setFont('helvetica', 'normal');
+  doc.text(docVal, margin + contentWidth - cardPad - doc.getTextWidth(docVal), cy);
+
+  cy += 5.5;
+
+  // Linha 2: Código UC, Telefone, E-mail
+  doc.setFont('helvetica', 'bold');
+  doc.text('Código da Instalação / UC: ', margin + cardPad, cy);
+  const ucW = doc.getTextWidth('Código da Instalação / UC: ');
+  doc.setFont('helvetica', 'normal');
+  doc.text(client.utilityId || 'A definir', margin + cardPad + ucW, cy);
+
+  const telText = `Telefone: ${client.phone || 'Não informado'}   |   E-mail: ${client.email || 'Não informado'}`;
+  doc.text(telText, margin + contentWidth - cardPad - doc.getTextWidth(telText), cy);
+
+  cy += 5.5;
+
+  // Linha 3: Endereço da Instalação
+  doc.setFont('helvetica', 'bold');
+  doc.text('Endereço da Instalação: ', margin + cardPad, cy);
+  const endW = doc.getTextWidth('Endereço da Instalação: ');
+  doc.setFont('helvetica', 'normal');
+  const splitClientAddr = doc.splitTextToSize(clientAddressStr, contentWidth - cardPad * 2 - endW);
+  doc.text(splitClientAddr[0] || clientAddressStr, margin + cardPad + endW, cy);
+
+  y += card1H + 5;
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 3. SEÇÃO 2: OUTORGADOS (EMPRESA INTEGRADORA & PROCURADOR TÉCNICO)
+  // ─────────────────────────────────────────────────────────────────────────────
+  doc.setTextColor(15, 23, 42);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
   doc.text('2. OUTORGADOS (EMPRESA INTEGRADORA E PROCURADOR TÉCNICO):', margin, y);
-  y += 4;
+  y += 3.5;
 
   const companyAddressStr = company.address
-    ? `${company.address.street || ''}, nº ${company.address.number || ''}, ${company.address.neighborhood || ''}, ${company.address.city || ''} - ${company.address.state || 'RJ'}, CEP: ${company.address.zipCode || ''}`
+    ? `${company.address.street || ''}, nº ${company.address.number || ''}${company.address.complement ? `, ${company.address.complement}` : ''}, ${company.address.neighborhood || ''}, ${company.address.city || ''} - ${company.address.state || 'RJ'}, CEP: ${company.address.zipCode || ''}`
     : 'Não informado';
 
-  const repDetails = `${rep.name || 'Responsável Técnico'}, ${rep.qualification || 'Engenheiro/Técnico Responsável'}, inscrito no CPF sob nº ${rep.cpf || 'Não informado'}, RG nº ${rep.rg || ''} (${rep.rgIssuer || 'Órgão Emissor'}), Registro Profissional ${rep.creaCft || 'Não informado'}/${rep.creaState || 'RJ'}${rep.rnp ? ` (RNP: ${rep.rnp})` : ''}.`;
+  const repDetails = `${rep.name || 'Responsável Técnico'}, ${rep.qualification || 'Engenheiro Eletricista / Técnico'}, inscrito no CPF sob nº ${rep.cpf || 'Não informado'}, RG nº ${rep.rg || 'Não informado'} (${rep.rgIssuer || 'SSP'}), Registro Profissional ${rep.creaCft || 'Não informado'}/${rep.creaState || 'RJ'}${rep.rnp ? ` (RNP: ${rep.rnp})` : ''}.`;
 
-  autoTable(doc, {
-    startY: y,
-    margin: { left: margin, right: margin },
-    theme: 'grid',
-    headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
-    bodyStyles: { fontSize: 8.5, textColor: [30, 41, 59] },
-    body: [
-      [
-        { content: `Empresa Integradora: ${company.companyName || company.tradeName || 'EMPRESA INTEGRADORA SOLAR'}`, colSpan: 2 },
-        { content: `CNPJ: ${company.cnpj || 'Não informado'}` },
-      ],
-      [
-        { content: `Endereço Comercial: ${companyAddressStr}`, colSpan: 2 },
-        { content: `Telefone: ${company.phone || rep.phone || 'Não informado'}` },
-      ],
-      [
-        { content: `Procurador Legal & Responsável Técnico:\n${repDetails}`, colSpan: 3 },
-      ],
-    ],
-  });
+  const card2H = 34;
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(margin, y, contentWidth, card2H, 1.5, 1.5, 'FD');
 
-  y = (doc as any).lastAutoTable.finalY + 8;
+  cy = y + cardPad + 2.5;
 
-  // --- Seção 3: PODERES E FINALIDADE ESPECÍFICA ---
+  // Linha 1: Empresa Integradora e CNPJ
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('3. FINALIDADE E PODERES CONFERIDOS:', margin, y);
-  y += 5;
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Empresa Integradora: ', margin + cardPad, cy);
+  const empW = doc.getTextWidth('Empresa Integradora: ');
+  doc.setFont('helvetica', 'normal');
+  doc.text(company.companyName || company.tradeName || 'EMPRESA INTEGRADORA SOLAR', margin + cardPad + empW, cy);
+
+  const cnpjText = `CNPJ: ${company.cnpj || 'Não informado'}`;
+  doc.setFont('helvetica', 'bold');
+  doc.text(cnpjText, margin + contentWidth - cardPad - doc.getTextWidth(cnpjText), cy);
+
+  cy += 5.5;
+
+  // Linha 2: Endereço Comercial e Telefone
+  doc.setFont('helvetica', 'bold');
+  doc.text('Endereço Comercial: ', margin + cardPad, cy);
+  const cEndW = doc.getTextWidth('Endereço Comercial: ');
+  doc.setFont('helvetica', 'normal');
+  const splitCompAddr = doc.splitTextToSize(companyAddressStr, contentWidth * 0.65 - cEndW);
+  doc.text(splitCompAddr[0] || companyAddressStr, margin + cardPad + cEndW, cy);
+
+  const compPhone = `Telefone: ${company.phone || rep.phone || 'Não informado'}`;
+  doc.text(compPhone, margin + contentWidth - cardPad - doc.getTextWidth(compPhone), cy);
+
+  cy += 5.5;
+
+  // Linha 3: Linha divisória interna sutil
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.2);
+  doc.line(margin + cardPad, cy, margin + contentWidth - cardPad, cy);
+  cy += 3.5;
+
+  // Linha 4: Procurador Legal & Responsável Técnico
+  doc.setFont('helvetica', 'bold');
+  doc.text('Procurador Legal & Responsável Técnico: ', margin + cardPad, cy);
+  cy += 4.2;
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8.0);
+  doc.setTextColor(30, 41, 59);
+  const splitRep = doc.splitTextToSize(repDetails, contentWidth - cardPad * 2);
+  doc.text(splitRep, margin + cardPad, cy);
+
+  y += card2H + 5;
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 4. SEÇÃO 3: FINALIDADE ESPECÍFICA E PODERES CONFERIDOS
+  // ─────────────────────────────────────────────────────────────────────────────
+  doc.setTextColor(15, 23, 42);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.text('3. FINALIDADE E PODERES CONFERIDOS:', margin, y);
+  y += 4.5;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.2);
   doc.setTextColor(30, 41, 59);
 
-  const powerText = `Pelo presente instrumento particular de procuração, o(a) OUTORGANTE nomeia e constitui o(a) OUTORGADO(A) como seu(sua) bastante procurador(a) com a finalidade exclusiva de representá-lo(a) perante a distribuidora de energia elétrica ${utilityFull}, bem como perante os órgãos reguladores e fiscalizadores competentes (ANEEL, CREA/CFT e Prefeituras), conferindo-lhe poderes específicos para:
+  const introText = `Pelo presente instrumento particular de procuração, o(a) OUTORGANTE nomeia e constitui o(a) OUTORGADO(A) como seu(sua) bastante procurador(a) com a finalidade específica e exclusiva de representá-lo(a) perante a distribuidora de energia elétrica ${utilityFull}, bem como perante os órgãos reguladores e fiscalizadores competentes (ANEEL, CREA/CFT e Prefeituras), conferindo-lhe amplos poderes para:`;
 
-a) Solicitar Consulta de Acesso, Parecer de Acesso e Vistoria para conexão de sistema de Microgeração ou Minigeração Distribuída (GD) na Unidade Consumidora supracitada;
-b) Assinar e protocolar Formulários de Acesso, Memoriais Descritivos, Anotações de Responsabilidade Técnica (ART/TRT), Diagramas Unifilares, Desenhos Técnicos e demais documentos de engenharia;
-c) Requerer inspeções, testes de conformidade, vistoria técnica e a substituição do sistema de medição para medidor bidirecional;
-d) Receber notificações, notificações de exigências técnicas, orientações, pareceres e assinar o Acordo de Acesso / Termo de Relacionamento Operacional (TRO);
-e) Solicitar e acompanhar o rateio e transferência de créditos de energia solar decorrentes da Lei Federal nº 14.300/2022 para Unidades Consumidoras Beneficiárias de mesma titularidade ou cooperadas/consorciadas;
-f) Acessar histórico de consumo e faturas da referida Unidade Consumidora exclusivamente para instrução do dimensionamento e homologação técnica.`;
+  const splitIntro = doc.splitTextToSize(introText, contentWidth);
+  doc.text(splitIntro, margin, y);
+  y += splitIntro.length * 3.7 + 2.5;
 
-  const splitPowers = doc.splitTextToSize(powerText, contentWidth);
-  doc.text(splitPowers, margin, y);
-  y += splitPowers.length * 3.8 + 4;
+  const powersList = [
+    { item: 'a)', text: 'Solicitar Consulta de Acesso, Informação de Acesso, Parecer de Acesso e Vistoria Técnica para conexão de sistema de Microgeração ou Minigeração Distribuída (GD) na Unidade Consumidora supracitada;' },
+    { item: 'b)', text: 'Assinar e protocolar Formulários de Acesso oficiais, Memoriais Descritivos, Anotações de Responsabilidade Técnica (ART/TRT), Diagramas Unifilares/Multifilares e desenhos técnicos de engenharia;' },
+    { item: 'c)', text: 'Requerer inspeções, testes de conformidade, vistoria técnica e a substituição do padrão de medição para medidor bidirecional homologado;' },
+    { item: 'd)', text: 'Receber notificações técnicas, responder pedidos de informações, retirar pareceres e assinar o Acordo de Acesso e o Termo de Relacionamento Operacional (TRO);' },
+    { item: 'e)', text: 'Solicitar, cadastrar e acompanhar o rateio e a transferência de créditos de energia solar decorrentes da Lei Federal nº 14.300/2022 para Unidades Consumidoras Beneficiárias indicadas pelo titular;' },
+    { item: 'f)', text: 'Acessar histórico de consumo e faturas da Unidade Consumidora exclusivamente para instrução do dimensionamento técnico e homologação da usina.' },
+  ];
 
-  // --- Seção 4: VALIDADE E LOCAL ---
+  powersList.forEach(p => {
+    doc.setFont('helvetica', 'bold');
+    doc.text(p.item, margin + 2, y);
+    doc.setFont('helvetica', 'normal');
+    const splitP = doc.splitTextToSize(p.text, contentWidth - 8);
+    doc.text(splitP, margin + 8, y);
+    y += splitP.length * 3.6 + 1.2;
+  });
+
+  y += 2.0;
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 5. SEÇÃO 4: PRAZO DE VALIDADE E DATA
+  // ─────────────────────────────────────────────────────────────────────────────
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(8.0);
+  doc.setTextColor(71, 85, 105); // Slate 600
+  const validText = 'Esta procuração é válida pelo prazo determinado de 12 (doze) meses a contar da data de sua assinatura, sendo vedado o substabelecimento a terceiros sem prévia e expressa anuência do Outorgante.';
+  const splitValid = doc.splitTextToSize(validText, contentWidth);
+  doc.text(splitValid, margin, y);
+  y += splitValid.length * 3.6 + 4;
+
   const today = new Date();
   const months = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-  const dateStr = `${client.address?.city || company.address?.city || 'Rio de Janeiro'}, ${today.getDate()} de ${months[today.getMonth()]} de ${today.getFullYear()}.`;
-
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(8);
-  doc.setTextColor(71, 85, 105);
-  doc.text('Esta procuração é válida pelo prazo de 12 (doze) meses a contar da data de sua assinatura, sendo vedado o substabelecimento sem expressa anuência.', margin, y);
-  y += 6;
+  const city = client.address?.city || company.address?.city || 'Niterói';
+  const state = client.address?.state || company.address?.state || 'RJ';
+  const dateStr = `${city} - ${state}, ${today.getDate()} de ${months[today.getMonth()]} de ${today.getFullYear()}.`;
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+  doc.setFontSize(9.0);
   doc.setTextColor(15, 23, 42);
   doc.text(dateStr, pageWidth / 2, y, { align: 'center' });
-  y += 16;
+  y += 18;
 
-  // --- Seção 5: ASSINATURAS ---
-  const colWidth = (contentWidth - 16) / 2;
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 6. SEÇÃO 5: ASSINATURAS ESPAÇADAS E ALINHADAS
+  // ─────────────────────────────────────────────────────────────────────────────
+  const colWidth = (contentWidth - 20) / 2;
 
-  // Linha Outorgante
+  // Linha 1: Outorgante (Cliente)
   doc.setDrawColor(100, 116, 139);
+  doc.setLineWidth(0.35);
   doc.line(margin, y, margin + colWidth, y);
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
-  doc.text(client.name || 'OUTORGANTE (CLIENTE)', margin + colWidth / 2, y + 4, { align: 'center' });
+  doc.setTextColor(15, 23, 42);
+  doc.text(client.name || 'OUTORGANTE (TITULAR DA UC)', margin + colWidth / 2, y + 4.2, { align: 'center' });
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
-  doc.text(`CPF/CNPJ: ${client.document || 'Assinatura Digital / Gov.br'}`, margin + colWidth / 2, y + 8, { align: 'center' });
+  doc.setTextColor(71, 85, 105);
+  doc.text(`CPF/CNPJ: ${client.document || 'Assinatura Digital / Gov.br'}`, margin + colWidth / 2, y + 8.2, { align: 'center' });
+  doc.text('Titular da Unidade Consumidora', margin + colWidth / 2, y + 11.8, { align: 'center' });
 
-  // Linha Outorgado
-  doc.line(margin + colWidth + 16, y, pageWidth - margin, y);
+  // Linha 2: Outorgado (Empresa / Responsável Técnico)
+  const col2X = margin + colWidth + 20;
+  doc.setDrawColor(100, 116, 139);
+  doc.setLineWidth(0.35);
+  doc.line(col2X, y, col2X + colWidth, y);
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
-  doc.text(rep.name || company.companyName || 'OUTORGADO (PROCURADOR)', margin + colWidth + 16 + colWidth / 2, y + 4, { align: 'center' });
+  doc.setTextColor(15, 23, 42);
+  doc.text(rep.name || company.companyName || 'OUTORGADO (PROCURADOR)', col2X + colWidth / 2, y + 4.2, { align: 'center' });
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
-  doc.text(`CREA/CFT: ${rep.creaCft || 'Procurador Responsável'}`, margin + colWidth + 16 + colWidth / 2, y + 8, { align: 'center' });
+  doc.setTextColor(71, 85, 105);
+  doc.text(`CREA/CFT: ${rep.creaCft || 'Procurador Técnico'} | ${company.companyName || 'Empresa Integradora'}`, col2X + colWidth / 2, y + 8.2, { align: 'center' });
+  doc.text('Responsável Técnico & Procurador Legal', col2X + colWidth / 2, y + 11.8, { align: 'center' });
 
-  // Rodapé
-  doc.setFontSize(7);
-  doc.setTextColor(148, 163, 184);
-  doc.text('Documento gerado automaticamente pelo SolarCAD Desktop — Suíte Profissional de Homologação GD', pageWidth / 2, pageHeight - 6, { align: 'center' });
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 7. RODAPÉ DE SEGURANÇA E AUTENTICIDADE
+  // ─────────────────────────────────────────────────────────────────────────────
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.2);
+  doc.line(margin, pageHeight - 11, pageWidth - margin, pageHeight - 11);
+
+  doc.setFontSize(7.0);
+  doc.setTextColor(148, 163, 184); // Slate 400
+  doc.text(
+    'SolarCAD Desktop — Suíte Profissional de Homologação GD • Emissão Conforme Lei Federal 14.300/2022 e Resolução Normativa ANEEL 1.000/2021',
+    pageWidth / 2,
+    pageHeight - 7.5,
+    { align: 'center' }
+  );
 
   return doc;
 }

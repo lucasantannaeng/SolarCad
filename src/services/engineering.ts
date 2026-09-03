@@ -5,6 +5,205 @@ import { evaluateTransformerNeed, TransformerResult } from './transformerDecisio
 
 export type BreakerPolarity = 'Bipolar' | 'Tripolar';
 
+// ═════════════════════════════════════════════════════════════════════
+// NBR 5410 — TABELA 40: Fatores de Correção Térmica (FCT)
+// Referência: 30°C no ar (Métodos A a F)
+// Conforme ABNT NBR 5410 e ABNT NBR 16690
+// ═════════════════════════════════════════════════════════════════════
+export const TABLE_40_FCT_PVC: Record<number, number> = {
+  10: 1.22,
+  15: 1.17,
+  20: 1.12,
+  25: 1.06,
+  30: 1.00,
+  35: 0.94,
+  40: 0.87,
+  45: 0.79,
+  50: 0.71,
+  55: 0.61,
+  60: 0.50, // Sob telhado / exposição solar direta
+  65: 0.35,
+};
+
+export const TABLE_40_FCT_EPR_XLPE: Record<number, number> = {
+  10: 1.15,
+  15: 1.12,
+  20: 1.08,
+  25: 1.04,
+  30: 1.00,
+  35: 0.96,
+  40: 0.91,
+  45: 0.87,
+  50: 0.82,
+  55: 0.76,
+  60: 0.71, // Sob telhado para cabos solares CC e cabos XLPE CA
+  65: 0.65,
+  70: 0.58,
+  75: 0.50,
+  80: 0.41,
+};
+
+// ═════════════════════════════════════════════════════════════════════
+// NBR 5410 — TABELA 42: Fatores de Correção de Agrupamento (FCA)
+// Métodos de instalação 1: em feixe ao ar livre, sobre superfícies, embutidos ou em condutos fechados
+// ═════════════════════════════════════════════════════════════════════
+export const TABLE_42_FCA: Record<number, number> = {
+  1: 1.00,
+  2: 0.80,
+  3: 0.70,
+  4: 0.65,
+  5: 0.60,
+  6: 0.57,
+  7: 0.54,
+  8: 0.52,
+  9: 0.50,
+  10: 0.50,
+  11: 0.50,
+  12: 0.45,
+  13: 0.45,
+  14: 0.45,
+  15: 0.45,
+  16: 0.41,
+  17: 0.41,
+  18: 0.41,
+  19: 0.41,
+  20: 0.38,
+};
+
+/**
+ * Obtém o Fator de Correção de Temperatura (FCT) segundo a NBR 5410 Tabela 40.
+ */
+export const getFCT = (temperature: number = 30, insulation: 'PVC' | 'EPR' | 'XLPE' = 'PVC'): number => {
+  const table = insulation === 'PVC' ? TABLE_40_FCT_PVC : TABLE_40_FCT_EPR_XLPE;
+  const temps = Object.keys(table).map(Number).sort((a, b) => a - b);
+
+  if (temperature <= temps[0]) return table[temps[0]];
+  if (temperature >= temps[temps.length - 1]) return table[temps[temps.length - 1]];
+
+  if (table[temperature] !== undefined) {
+    return table[temperature];
+  }
+
+  // Interpolação linear se a temperatura estiver entre dois pontos tabelados
+  for (let i = 0; i < temps.length - 1; i++) {
+    const t1 = temps[i];
+    const t2 = temps[i + 1];
+    if (temperature > t1 && temperature < t2) {
+      const f1 = table[t1];
+      const f2 = table[t2];
+      const interpolated = f1 + ((temperature - t1) / (t2 - t1)) * (f2 - f1);
+      return Number(interpolated.toFixed(3));
+    }
+  }
+  return 1.0;
+};
+
+/**
+ * Obtém o Fator de Correção de Agrupamento (FCA) segundo a NBR 5410 Tabela 42.
+ */
+export const getFCA = (circuitCount: number = 1): number => {
+  if (circuitCount <= 1) return 1.00;
+  if (circuitCount >= 20) return 0.38;
+  if (TABLE_42_FCA[circuitCount] !== undefined) {
+    return TABLE_42_FCA[circuitCount];
+  }
+  if (circuitCount >= 9 && circuitCount <= 11) return 0.50;
+  if (circuitCount >= 12 && circuitCount <= 15) return 0.45;
+  if (circuitCount >= 16 && circuitCount <= 19) return 0.41;
+  return 0.57;
+};
+
+/**
+ * Calcula a corrente corrigida de projeto (Iz requerida) considerando FCT e FCA:
+ * Iz = In / (FCT * FCA)
+ * Conforme ABNT NBR 5410.
+ */
+export const calculateCorrectedCurrent = (nominalCurrent: number, fct: number = 1.0, fca: number = 1.0): number => {
+  const factor = fct * fca;
+  if (factor <= 0) return nominalCurrent;
+  return Number((nominalCurrent / factor).toFixed(2));
+};
+
+// ═════════════════════════════════════════════════════════════════════
+// CORRENTE DE CURTO-CIRCUITO E I²t DO DISJUNTOR (NBR 5410 / NBR 16690 / NBR IEC 60898)
+// ═════════════════════════════════════════════════════════════════════
+export const STANDARD_BREAKER_ICN_KA = [3.0, 4.5, 6.0, 10.0] as const;
+
+export interface ShortCircuitResult {
+  gridShortCircuitCurrentKa: number;
+  inverterContributionCurrentA: number;
+  totalShortCircuitCurrentKa: number;
+  minBreakerIcnKa: number;
+  breakerIcnValid: boolean;
+  cableThermalWithstandA2s: number;
+  passThroughEnergyA2s: number;
+  cableThermalValid: boolean;
+  warnings: string[];
+}
+
+/**
+ * Calcula a corrente de curto-circuito presumida no barramento CA e valida o disjuntor e I²t do condutor.
+ * Conforme NBR 5410 (§5.3), NBR 16690 e NBR IEC 60898.
+ */
+export const calculateShortCircuitAndI2t = (
+  nominalCurrent: number,
+  voltage: VoltageLevel,
+  cableSectionMm2: number = 6.0,
+  breakerIcnKa: number = 4.5,
+  cableDistance: number = 15,
+  insulation: 'PVC' | 'EPR' | 'XLPE' = 'PVC'
+): ShortCircuitResult => {
+  const warnings: string[] = [];
+  const voltageOption = VOLTAGES.find(v => v.value === voltage);
+  const phaseVoltage = voltageOption ? voltageOption.phaseVoltage : 127;
+
+  // 1. Corrente de curto-circuito presumida da rede no barramento CA (estimativa típica BT urbana 3.5 ~ 4.5 kA)
+  const baseGridIccKa = phaseVoltage >= 220 ? 4.5 : 3.5;
+  const gridIccKa = baseGridIccKa;
+
+  // 2. Contribuição dos inversores FV sob falta (NBR 16690 / IEC 62109: limitado eletronicamente a 1.1x In)
+  const inverterContributionA = Number((nominalCurrent * 1.1).toFixed(2));
+  const totalIccKa = Number((gridIccKa + inverterContributionA / 1000).toFixed(2));
+
+  // 3. Validação da Capacidade de Interrupção Nominal do Disjuntor (Icn em kA)
+  const minBreakerIcnKa = STANDARD_BREAKER_ICN_KA.find(icn => icn >= totalIccKa) || 10.0;
+  const breakerIcnValid = breakerIcnKa >= totalIccKa;
+
+  if (!breakerIcnValid) {
+    warnings.push(
+      `Icc presumida (${totalIccKa.toFixed(2)} kA) supera a capacidade de interrupção do disjuntor (${breakerIcnKa} kA). Risco de quebra/soldagem de contatos. Especificar disjuntor com Icn ≥ ${minBreakerIcnKa} kA (NBR IEC 60898).`
+    );
+  }
+
+  // 4. Verificação da Integral de Joule / Suportabilidade Térmica do Cabo (NBR 5410 §5.3.4.3: k²S² ≥ I²t)
+  const kFactor = insulation === 'PVC' ? 115 : 143;
+  const cableThermalWithstand = Math.round(Math.pow(kFactor * cableSectionMm2, 2));
+
+  // Tempo de atuação instantânea magnética do disjuntor sob curto-circuito (t ≈ 20ms = 0.02s)
+  const tOpeningSec = 0.02;
+  const totalIccA = totalIccKa * 1000;
+  const passThroughEnergy = Math.round(Math.pow(totalIccA, 2) * tOpeningSec);
+
+  const cableThermalValid = cableThermalWithstand >= passThroughEnergy;
+  if (!cableThermalValid) {
+    warnings.push(
+      `Energia passante de curto-circuito (${passThroughEnergy} A²s) excede a suportabilidade térmica do cabo (${cableThermalWithstand} A²s). Aumente a seção do condutor para evitar queima térmica durante o curto-circuito.`
+    );
+  }
+
+  return {
+    gridShortCircuitCurrentKa: gridIccKa,
+    inverterContributionCurrentA: inverterContributionA,
+    totalShortCircuitCurrentKa: totalIccKa,
+    minBreakerIcnKa,
+    breakerIcnValid,
+    cableThermalWithstandA2s: cableThermalWithstand,
+    passThroughEnergyA2s: passThroughEnergy,
+    cableThermalValid,
+    warnings,
+  };
+};
+
 export const calculateNominalCurrent = (powerKw: number, voltage: VoltageLevel, outputPhases: number): number => {
   const powerWatts = powerKw * 1000;
   const voltageOption = VOLTAGES.find(v => v.value === voltage);
@@ -44,6 +243,10 @@ export interface BlockEngineeringResult {
   microNominalCurrent?: number;
   trunkCurrent?: number;
   maxMicrosInSeries?: number;
+  fct?: number;
+  fca?: number;
+  correctedCurrent?: number;
+  shortCircuitResult?: ShortCircuitResult;
 }
 
 export interface ProjectEngineeringResult {
@@ -55,6 +258,10 @@ export interface ProjectEngineeringResult {
   totalAcPower: number;
   overallStatus: string;
   globalWarnings: string[];
+  fct?: number;
+  fca?: number;
+  correctedCurrent?: number;
+  shortCircuitResult?: ShortCircuitResult;
 }
 
 /**
@@ -248,6 +455,21 @@ export const getBlockEngineeringStatus = (block: EquipmentBlock, technical: Tech
     dcProtection.warnings.forEach(w => warnings.push(w));
   }
 
+  // Fatores de Correção Térmica e Agrupamento NBR 5410 padrão (30°C, 1 circuito)
+  const fct = getFCT(30, 'PVC');
+  const fca = getFCA(1);
+  const correctedCurrent = calculateCorrectedCurrent(nominalCurrent, fct, fca);
+
+  // Verificação de Curto-Circuito e I²t do Bloco
+  const shortCircuitResult = calculateShortCircuitAndI2t(
+    nominalCurrent,
+    technical.voltage,
+    6.0,
+    4.5,
+    technical.distance || 15,
+    'PVC'
+  );
+
   return {
     blockId: block.id,
     nominalCurrent,
@@ -265,6 +487,10 @@ export const getBlockEngineeringStatus = (block: EquipmentBlock, technical: Tech
     microNominalCurrent: isMicro ? singleMicroIn : undefined,
     trunkCurrent: isMicro ? trunkCurrent : undefined,
     maxMicrosInSeries: isMicro ? maxMicrosInSeries : undefined,
+    fct,
+    fca,
+    correctedCurrent,
+    shortCircuitResult,
   };
 };
 
@@ -280,6 +506,20 @@ export const getProjectEngineeringStatus = (blocks: EquipmentBlock[], technical:
   const hasThreePhase = blockResults.some(r => r.breakerPolarity === 'Tripolar');
   const totalBreakerPolarity: BreakerPolarity = hasThreePhase ? 'Tripolar' : 'Bipolar';
 
+  const fct = getFCT(30, 'PVC');
+  const fca = getFCA(1);
+  const correctedCurrent = calculateCorrectedCurrent(totalNominalCurrent, fct, fca);
+
+  // Verificação de Curto-Circuito Global no Barramento CA
+  const shortCircuitResult = calculateShortCircuitAndI2t(
+    totalNominalCurrent,
+    technical.voltage,
+    10.0,
+    4.5,
+    technical.distance || 15,
+    'PVC'
+  );
+
   let overallStatus = 'SUCCESS';
   const globalWarnings: string[] = [];
 
@@ -293,6 +533,11 @@ export const getProjectEngineeringStatus = (blocks: EquipmentBlock[], technical:
     globalWarnings.push(`Corrente total dos inversores (${totalNominalCurrent.toFixed(1)}A) maior que disjuntor geral (${technical.mainBreaker}A). Necessário aumento de carga.`);
   }
 
+  // Alerta de capacidade de curto-circuito se o disjuntor padrão não suportar
+  if (!shortCircuitResult.breakerIcnValid) {
+    shortCircuitResult.warnings.forEach(w => globalWarnings.push(w));
+  }
+
   return {
     blocks: blockResults,
     totalNominalCurrent,
@@ -302,5 +547,9 @@ export const getProjectEngineeringStatus = (blocks: EquipmentBlock[], technical:
     totalAcPower,
     overallStatus,
     globalWarnings,
+    fct,
+    fca,
+    correctedCurrent,
+    shortCircuitResult,
   };
 };

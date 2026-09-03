@@ -144,6 +144,12 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({ open, onOpenChange }) 
               </div>
             </div>
           </div>
+
+          {/* Informações da Versão e Sistema */}
+          <div className="text-[11px] text-muted-foreground/80 flex items-center justify-between px-1 py-1 border-t border-border/60">
+            <span>SolarCAD Desktop • Versão 1.3.0 Pro</span>
+            <span className="font-mono">Build 2026.09 (LTS)</span>
+          </div>
         </div>
 
         <div className="flex items-center justify-between pt-2">

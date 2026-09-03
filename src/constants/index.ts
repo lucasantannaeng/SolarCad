@@ -53,3 +53,104 @@ export const DEFAULT_INVERTER = {
   outputPhases: 1,
   inverterType: 'string' as const,
 };
+
+export interface StructureTypeOption {
+  value: string;
+  label: string;
+  shortLabel: string;
+  description: string;
+}
+
+export const STRUCTURE_TYPES: StructureTypeOption[] = [
+  {
+    value: 'CERAMIC',
+    label: 'Telhado Cerâmico / Colonial',
+    shortLabel: 'Cerâmico',
+    description: 'Fixação por ganchos em caibros/ripas sob telhas cerâmicas/coloniais',
+  },
+  {
+    value: 'METALLIC',
+    label: 'Telha Metálica / Trapezoidal',
+    shortLabel: 'Metálico',
+    description: 'Mini-trilhos com parafusos autobrocantes em telhas de zinco/aço/sanduíche',
+  },
+  {
+    value: 'FIBROCEMENT',
+    label: 'Fibrocimento / Ondulado',
+    shortLabel: 'Fibrocimento',
+    description: 'Parafusos prisioneiros (haste roscada) fixados diretamente nas terças',
+  },
+  {
+    value: 'FLAT_SLAB',
+    label: 'Laje Plana / Triângulos',
+    shortLabel: 'Laje Plana',
+    description: 'Estruturas triangulares em alumínio/aço com inclinação e lastro/químico',
+  },
+  {
+    value: 'GROUND',
+    label: 'Solo / Solo Cravado',
+    shortLabel: 'Solo',
+    description: 'Estruturas monoposte/biposte cravadas, brocadas ou com sapatas de concreto',
+  },
+  {
+    value: 'CARPORT',
+    label: 'Garagem Solar / Carport',
+    shortLabel: 'Carport',
+    description: 'Estrutura metálica de cobertura para vagas de estacionamento/veículos',
+  },
+];
+
+export interface CardinalPointOption {
+  label: string;
+  azimuth: number;
+  code: string;
+  description: string;
+}
+
+export const CARDINAL_POINTS: CardinalPointOption[] = [
+  { label: 'Norte (N - 0°)', azimuth: 0, code: 'N', description: '0° - Orientação ideal de máxima irradiância no Brasil' },
+  { label: 'Nordeste (NE - 45°)', azimuth: 45, code: 'NE', description: '45° - Pico de geração no início/meio da manhã' },
+  { label: 'Leste (L/E - 90°)', azimuth: 90, code: 'L', description: '90° - Pico matutino com menor geração à tarde' },
+  { label: 'Sudeste (SE - 135°)', azimuth: 135, code: 'SE', description: '135° - Orientação intermediária com perdas moderadas' },
+  { label: 'Sul (S - 180°)', azimuth: 180, code: 'S', description: '180° - Menor aproveitamento solar no Hemisfério Sul' },
+  { label: 'Sudoeste (SO - 225°)', azimuth: 225, code: 'SO', description: '225° - Orientação intermediária vespertina' },
+  { label: 'Oeste (O/W - 270°)', azimuth: 270, code: 'O', description: '270° - Pico de geração à tarde/poente' },
+  { label: 'Noroeste (NO - 315°)', azimuth: 315, code: 'NO', description: '315° - Alta geração no período da tarde' },
+];
+
+export const TILT_PRESETS = [10, 15, 18, 20, 25] as const;
+
+export const DEFAULT_ROOF_PLANE_NAMES = [
+  'Água 1 (Norte - Telhado Principal)',
+  'Água 2 (Leste - Garagem)',
+  'Água 3 (Oeste - Varanda)',
+  'Água 4 (Sul - Secundária)',
+  'Laje Plana / Triângulos',
+  'Estrutura de Solo / Solo Cravado',
+  'Carport / Garagem Solar',
+] as const;
+
+export function getStructureTypeLabel(value?: string): string {
+  const match = STRUCTURE_TYPES.find(s => s.value === value);
+  return match ? match.label : (value || 'Telhado Cerâmico / Colonial');
+}
+
+export function getAzimuthCardinalLabel(azimuth?: number): string {
+  if (azimuth === undefined || azimuth === null) return '0° (Norte)';
+  const normalized = ((azimuth % 360) + 360) % 360;
+  // Match closest cardinal
+  let closest = CARDINAL_POINTS[0];
+  let minDiff = 360;
+  for (const cp of CARDINAL_POINTS) {
+    const diff = Math.min(Math.abs(normalized - cp.azimuth), 360 - Math.abs(normalized - cp.azimuth));
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = cp;
+    }
+  }
+  if (minDiff === 0) {
+    return `${normalized}° (${closest.code})`;
+  }
+  return `${normalized}° (~${closest.code})`;
+}
+

@@ -1,12 +1,12 @@
 # ☀️ SolarCad — Interactive Web CAD & Desktop Suite for Photovoltaic Engineering
 
-[![Version](https://img.shields.io/badge/Version-1.2.0-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/Version-1.3.0-blue.svg)](package.json)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=black)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Electron](https://img.shields.io/badge/Electron-34.0-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
-[![Vitest](https://img.shields.io/badge/Vitest-69%20Passed-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Vitest](https://img.shields.io/badge/Vitest-179%20Passed%20(100%25)-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
 [![AutoCAD DXF](https://img.shields.io/badge/AutoCAD-DXF%20R12%20Export-red.svg)]()
 [![Standards](https://img.shields.io/badge/Standards-NBR%205410%20%7C%20NBR%2016690%20%7C%20Lei%2014.300-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -25,28 +25,38 @@ Available as both a **Cloud-Native Web Application** and a **Standalone Offline 
 
 ## 🚀 Key Features
 
-* 📐 **Interactive Canvas CAD Workspace (`DiagramCanvas.tsx`)**:
-  * Real-time 2D vector rendering of PV module strings, central string inverters, microinverter trunks (daisy-chain), stringboxes, AC distribution boards, and bidirectional utility meters.
-  * **Interactive Pan & Zoom (50% to 250%)** with hardware-accelerated rendering and smooth viewport resets.
-  * Technical drawing hierarchy adhering to ABNT standards (Conductors `0.55mm`, Symbols `0.30mm`, Border `0.40mm`).
+* 📐 **Interactive Multi-Mode CAD Workspace (`DiagramCanvas.tsx`)**:
+  * **Modo 1 — Unifilar Padrão NBR:** Linha única com simbologia normatizada, String Box CC, QDS CA, barramentos e padrão da concessionária.
+  * **Modo 2 — Multifilar / Trifilar (NBR 5410):** Esquema de fases detalhado com condutores individuais (R - Preto, S - Cinza, T - Vermelho), Neutro (Azul Claro) e Terra/PE (Verde).
+  * **Modo 3 — Comunicação & Modbus RTU (Modbus-IDA / IEC 60870-5):** Topologia serial Daisy-Chain de par trançado blindado STP 2x24 AWG com terminação 120Ω, régua de bornes A(+)/B(-)/SHD, Smart Meter 4 quadrantes e TCs toroidais bipartidos.
+  * **Interactive Pan & Zoom (40% a 300%)** com alternador A4/A3 instantâneo e botão de ajuste automático à tela.
 
-* ⚡ **Regulatory Electrical Sizing Engines (`engineering.ts`, `dcProtection.ts`, `transformerDecision.ts`)**:
-  * **DC Protection (NBR 16690):** Automatic calculation of gPV string fuses ($1.5\times I_{sc}$), DC disconnect switches, and Class II Surge Protection Devices (DPS CC 600V/1000V/1500V).
-  * **DC/AC Conductor Sizing:** Iterative voltage drop ($\Delta V \le 1.5\%$) and current capacity calculations for PV Solar 1.5kV/1.8kV and XLPE/PVC AC cables.
-  * **Substation & Transformer Decision Engine:** Phase matrix algorithm (12 combinatorial scenarios) with automatic kVA sizing ($P_{trafo} \ge 1.2\times P_{inv}$).
-  * **MPPT Thermal & Clipping Verifications:** Real-time validation of string currents against inverter limits, preventing thermal tripping and clipping.
+* 🧠 **Deterministic String Optimization Engine (`stringOptimizer.ts`)**:
+  * Dimensionamento fotovoltaico determinístico NBR 16690 com correção térmica de $V_{oc,max}$ (-0.28%/°C) e $V_{mp,min}$ (-0.35%/°C).
+  * Overpowering/FDI ideal de 120% a 130% e balanceamento simétrico de strings por MPPT.
+  * Suporte nativo completo a Microinversores (Hoymiles, Deye Micro, APsystems, NEP, TSUN) por canal independente.
 
-* 📋 **Automated Utility Grid Access Forms Generator (Formulários de Homologação GD)**:
-  * **ENEL Distribuição RJ:** Direct filling of official Excel rateio sheets (`Formulario_Rateio_ENEL_Rj.xlsm`) and access requests.
-  * **LIGHT Serviços de Eletricidade:** Automated generation of Annex IV access request forms.
-  * **CERCI & ENERGISA:** Automated PDF form population adhering to specific concessionaire requirements.
+* 🏠 **2D Interactive Roof & String Mapping (`StringRoofMapping.tsx`)**:
+  * Planta esquemática 2D organizada por águas reais da cobertura e solo.
+  * Parametrização completa: Estrutura (Cerâmica, Metálica, Fibrocimento, Laje, Solo, Carport), Azimute Solar (0° a 359°) com rosa dos ventos e Inclinação Tilt (10° a 25°).
 
-* 💰 **Marco Legal da GD Credit Distribution Engine (Lei 14.300 / ANEEL)**:
-  * Beneficiary consumer unit registration, credit percentage allocation matrix, and monthly energy generation simulation ($kWh/\text{month}$).
+* ⚖️ **Executive Power of Attorney Generator (`powerOfAttorneyService.ts`)**:
+  * Emissão de Procuração Específica para Homologação GD em PDF executivo (Lei Federal 14.300/2022 e REN ANEEL 1.000/2021).
+  * Cards institucionais para Outorgante e Outorgado, alíneas de poderes específicos e assinaturas desobstruídas.
+
+* ⚡ **Regulatory Electrical Sizing Engines (`engineering.ts`, `groundingCalculation.ts`, `dcProtection.ts`)**:
+  * **Proteção CC (NBR 16690):** Fusíveis gPV ($1.5\times I_{sc}$), chave seccionadora CC e DPS Classe II (1000V).
+  * **Aterramento NBR 5419:** Dimensionamento de malha e hastes de aço cobreado 5/8" x 2.40m com caixa de inspeção.
+  * **Correção FCT & FCA:** Fatores de agrupamento e temperatura sob telhado da NBR 5410.
+
+* 📋 **Multi-Utility Grid Access Suite (Homologação GD)**:
+  * Formulários oficiais automatizados para **Light (RECON-BT)**, **Enel RJ (CNC-GD)**, **CERCI** e **Energisa (NDU-013)**.
+  * Preenchimento direto de planilhas oficiais de rateio (`Formulario_Rateio_ENEL_Rj.xlsm`).
+  * Validador Pré-Protocolo com 5 pilares e alerta normativo de endereço completo das distribuidoras.
 
 * 📄 **Multi-Format Export Engine**:
-  * **AutoCAD DXF (R12/R2000):** Clean layered vector export (`FRAME`, `EQUIPMENT`, `POWER`, `DC_CABLE`, `TEXT`) for seamless CAD import.
-  * **Print-Ready PDF Dossier:** High-resolution Landscape A4 engineering report with technical title block, calculation memorial, and client metadata.
+  * **AutoCAD DXF com Blocos Nomeados:** Exportação em camadas com blocos padrão oficiais do AutoCAD (`BLOCK_INVERSOR`, `BLOCK_DISJUNTOR`, `BLOCK_MEDIDOR`, etc.).
+  * **Dossiê PDF de Engenharia:** Relatório de alta resolução com pranchas A4/A3, memorial de cálculo e ART/TRT.
 
 ---
 

@@ -23,6 +23,7 @@ export interface Address {
   city: string;
   state: string;
   zipCode: string;
+  complement?: string;
 }
 
 export interface ClientData {
@@ -86,6 +87,14 @@ export interface TechnicalData {
   dcCableDistance: number;
 }
 
+export type StructureType =
+  | 'CERAMIC'
+  | 'METALLIC'
+  | 'FIBROCEMENT'
+  | 'FLAT_SLAB'
+  | 'GROUND'
+  | 'CARPORT';
+
 export interface EquipmentBlock {
   id: number;
   moduleId: number;
@@ -101,6 +110,14 @@ export interface EquipmentBlock {
   moduleQty: number;
   inverterQty: number;
   strings: StringConfig[];
+  /** Tipo de estrutura de fixação / telhado */
+  structureType?: StructureType | string;
+  /** Identificação da Água do Telhado / Local (ex: 'Água 1 (Norte - Telhado Principal)', 'Água 2 (Leste - Garagem)', 'Solo') */
+  roofPlaneName?: string;
+  /** Azimute em graus (ex: 0=Norte, 45=NE, 90=Leste, 135=SE, 180=Sul, 225=SO, 270=Oeste, 315=NO) */
+  azimuth?: number;
+  /** Inclinação da estrutura em graus (ex: 15°) */
+  tilt?: number;
 }
 
 /** @deprecated Use equipmentBlocks instead */
@@ -118,6 +135,10 @@ export interface EquipmentData {
   moduleQty: number;
   inverterQty: number;
   strings: StringConfig[];
+  structureType?: StructureType | string;
+  roofPlaneName?: string;
+  azimuth?: number;
+  tilt?: number;
 }
 
 export type GDType = 

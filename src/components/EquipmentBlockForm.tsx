@@ -2,13 +2,33 @@ import React, { useState } from 'react';
 import { EquipmentBlock, ModuleData, InverterData } from '@/types';
 import { BlockEngineeringResult } from '@/services/engineering';
 import { optimizeStrings } from '@/services/aiService';
+import { calculateOptimalStringConfig } from '@/services/stringOptimizer';
 import {
   filterInvertersByType,
   getUniqueInverterBrands,
   getAvailableInvertersByBrand,
   switchInverterTopology,
 } from '@/services/inverterFilter';
-import { AlertTriangle, CheckCircle, Plus, Trash2, Sparkles, Loader2 } from 'lucide-react';
+import {
+  STRUCTURE_TYPES,
+  CARDINAL_POINTS,
+  TILT_PRESETS,
+  DEFAULT_ROOF_PLANE_NAMES,
+  getStructureTypeLabel,
+  getAzimuthCardinalLabel,
+} from '@/constants';
+import {
+  AlertTriangle,
+  CheckCircle,
+  Plus,
+  Trash2,
+  Sparkles,
+  Loader2,
+  Compass,
+  Layers,
+  Home,
+  Sliders,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InfoTrigger } from '@/components/InfoTrigger';
 import { toast } from 'sonner';
@@ -34,6 +54,11 @@ export const EquipmentBlockForm: React.FC<Props> = ({
   const [optimizing, setOptimizing] = useState(false);
   const isMicro = block.inverter?.inverterType === 'micro';
   const currentInverterType: 'string' | 'micro' = isMicro ? 'micro' : 'string';
+
+  const currentStructure = block.structureType || 'CERAMIC';
+  const currentRoofPlane = block.roofPlaneName !== undefined ? block.roofPlaneName : `Água ${blockIndex + 1} (Norte - Telhado Principal)`;
+  const currentAzimuth = block.azimuth !== undefined ? block.azimuth : 0;
+  const currentTilt = block.tilt !== undefined ? block.tilt : 15;
 
   const uniqueModuleBrands = Array.from(new Set(modules.map(m => m.brand)));
   const filteredInverters = filterInvertersByType(inverters, currentInverterType);
@@ -82,17 +107,21 @@ export const EquipmentBlockForm: React.FC<Props> = ({
   };
 
   const handleOptimize = async () => {
-    if (!block.module.id || !block.inverter.id) {
+    if (!block.module?.id || !block.inverter?.id) {
       toast.error('Selecione módulo e inversor antes de otimizar.');
       return;
     }
     setOptimizing(true);
     try {
-      const result = await optimizeStrings(block.module, block.inverter, block.inverterQty);
-      const newStrings = result.strings.map((s, i) => ({ id: i + 1, count: s.count }));
-      const totalMod = newStrings.reduce((a, s) => a + s.count, 0);
+      // Cálculo determinístico com rigor normativo NBR 16690 e manuais de engenharia
+      const optimal = calculateOptimalStringConfig(block.module, block.inverter, block.inverterQty);
+      const newStrings = optimal.strings.map((s, i) => ({ id: i + 1, count: s.count }));
+      const totalMod = isMicro
+        ? (newStrings[0]?.count || 4) * (block.inverterQty || 1)
+        : newStrings.reduce((a, s) => a + s.count, 0);
+
       onChange({ ...block, strings: newStrings, moduleQty: totalMod });
-      toast.success(result.explanation || 'Configuração otimizada aplicada!');
+      toast.success(optimal.explanation, { duration: 6000 });
     } catch (err: any) {
       toast.error(`Erro na otimização: ${err.message}`);
     } finally {
@@ -293,6 +322,143 @@ export const EquipmentBlockForm: React.FC<Props> = ({
           <span>Voc: {block.module.voc}V</span>
           <span>Isc: {block.module.isc}A</span>
           <span>Pot: {block.module.power}W</span>
+        </div>
+      </div>
+
+      {/* Seção de Estrutura de Fixação, Água do Telhado & Orientação Solar */}
+      <div className="mb-4 bg-card p-4 rounded-lg border border-border space-y-3">
+        <div className="flex items-center justify-between border-b border-border pb-2">
+          <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Compass className="w-4 h-4 text-brand-500" />
+            Estrutura de Fixação, Água do Telhado & Orientação Solar
+          </label>
+          <span className="text-xs text-muted-foreground font-mono">
+            {getStructureTypeLabel(currentStructure)} • {currentAzimuth}° ({getAzimuthCardinalLabel(currentAzimuth).split('(')[1]?.replace(')', '') || 'N'}) • {currentTilt}°
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Tipo de Estrutura */}
+          <div>
+            <label className={labelClass}>Tipo de Estrutura de Fixação</label>
+            <select
+              className={selectClass}
+              value={currentStructure}
+              onChange={e => onChange({ ...block, structureType: e.target.value })}
+            >
+              {STRUCTURE_TYPES.map(st => (
+                <option key={st.value} value={st.value}>
+                  {st.label}
+                </option>
+              ))}
+            </select>
+            <span className="text-[11px] text-muted-foreground mt-1 block truncate" title={STRUCTURE_TYPES.find(s => s.value === currentStructure)?.description}>
+              {STRUCTURE_TYPES.find(s => s.value === currentStructure)?.description}
+            </span>
+          </div>
+
+          {/* Identificação da Água do Telhado / Local */}
+          <div>
+            <label className={labelClass}>Identificação da Água / Local</label>
+            <input
+              type="text"
+              list={`roof-planes-list-${blockIndex}`}
+              placeholder="Ex: Água 1 (Norte - Principal)"
+              className={inputClass}
+              value={block.roofPlaneName !== undefined ? block.roofPlaneName : currentRoofPlane}
+              onChange={e => onChange({ ...block, roofPlaneName: e.target.value })}
+            />
+            <datalist id={`roof-planes-list-${blockIndex}`}>
+              {DEFAULT_ROOF_PLANE_NAMES.map((name, i) => (
+                <option key={i} value={name} />
+              ))}
+            </datalist>
+            <span className="text-[11px] text-muted-foreground mt-1 block">
+              Define o agrupamento na Planta 2D
+            </span>
+          </div>
+
+          {/* Azimute / Orientação Solar */}
+          <div>
+            <label className={labelClass}>Azimute Solar (Graus / Cardeal)</label>
+            <div className="flex gap-2 mt-1">
+              <select
+                className="w-1/2 rounded-md border border-input bg-card text-card-foreground p-2 text-xs"
+                value={CARDINAL_POINTS.some(c => c.azimuth === currentAzimuth) ? currentAzimuth : ''}
+                onChange={e => {
+                  if (e.target.value !== '') {
+                    onChange({ ...block, azimuth: Number(e.target.value) });
+                  }
+                }}
+              >
+                <option value="" disabled>Cardeal...</option>
+                {CARDINAL_POINTS.map(cp => (
+                  <option key={cp.azimuth} value={cp.azimuth}>
+                    {cp.label}
+                  </option>
+                ))}
+              </select>
+              <div className="relative w-1/2 flex items-center">
+                <input
+                  type="number"
+                  min="0"
+                  max="359"
+                  className="w-full rounded-md border border-input bg-card text-card-foreground p-2 text-xs font-mono text-center pr-6"
+                  value={currentAzimuth}
+                  onChange={e => {
+                    const val = Math.max(0, Math.min(359, Number(e.target.value) || 0));
+                    onChange({ ...block, azimuth: val });
+                  }}
+                />
+                <span className="absolute right-2 text-xs text-muted-foreground pointer-events-none">°</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 mt-1 text-[11px] text-muted-foreground">
+              <div
+                className="w-3.5 h-3.5 rounded-full border border-slate-600 inline-flex items-center justify-center transition-transform duration-300 shrink-0"
+                style={{ transform: `rotate(${currentAzimuth}deg)` }}
+              >
+                <div className="w-0.5 h-2 bg-red-500 rounded-full" />
+              </div>
+              <span className="truncate">Orientação: {getAzimuthCardinalLabel(currentAzimuth)}</span>
+            </div>
+          </div>
+
+          {/* Inclinação da Estrutura (Tilt) */}
+          <div>
+            <label className={labelClass}>Inclinação da Estrutura (Tilt)</label>
+            <div className="relative mt-1">
+              <input
+                type="number"
+                min="0"
+                max="90"
+                className="w-full rounded-md border border-input bg-card text-card-foreground p-2 text-xs font-mono text-center pr-6"
+                value={currentTilt}
+                onChange={e => {
+                  const val = Math.max(0, Math.min(90, Number(e.target.value) || 0));
+                  onChange({ ...block, tilt: val });
+                }}
+              />
+              <span className="absolute right-2.5 top-2.5 text-xs text-muted-foreground pointer-events-none">°</span>
+            </div>
+            <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+              <span className="text-[10px] text-muted-foreground">Atalhos:</span>
+              {TILT_PRESETS.map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => onChange({ ...block, tilt: t })}
+                  className={`px-1.5 py-0.5 text-[10px] rounded font-mono border transition-all ${
+                    currentTilt === t
+                      ? 'bg-brand-600 text-white border-brand-600 font-bold'
+                      : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                  }`}
+                >
+                  {t}°
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 

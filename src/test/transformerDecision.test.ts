@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { evaluateTransformerNeed } from '../services/transformerDecision';
 import { ConnectionType, VoltageLevel } from '../types';
 
-describe('Transformer Decision Matrix (Ozeias-derived)', () => {
+describe('Transformer Decision Matrix (Normas de Concessionárias / NBR 5410)', () => {
   // ═══ REDE 127/220V ═══
 
   it('Mono 127V + Inv Mono 220V → TRAFO obrigatório', () => {

@@ -1,6 +1,6 @@
 /**
- * Transformer Necessity Decision — Matriz de Fases
- * Extraído da engenharia reversa dos formulários REDE.frm/FIM.frm das planilhas Ozeias.
+ * Transformer Necessity Decision — Matriz de Fases e Compatibilidade de Tensão
+ * Conforme normas das distribuidoras de energia e ABNT NBR 5410.
  */
 import { ConnectionType, VoltageLevel } from '../types';
 

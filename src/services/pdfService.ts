@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 import { ProjectState, UtilityCompany, EquipmentBlock } from '../types';
 import { getProjectEngineeringStatus } from './engineering';
 import { estimateMonthlyGeneration } from './creditDistribution';
+import { getStructureTypeLabel, getAzimuthCardinalLabel } from '../constants';
 
 export const generateMemorialPDF = (project: ProjectState) => {
   const doc = new jsPDF();
@@ -175,25 +176,28 @@ export const generateMemorialPDF = (project: ProjectState) => {
 
   cursorY = (doc as any).lastAutoTable.finalY + 10;
 
-  // Detail per block
-  if (project.equipmentBlocks.length > 1) {
+  // Detail per block / roof structure
+  if (project.equipmentBlocks.length > 0) {
     checkPageBreak(40);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
-    doc.text("Detalhamento por Conjunto:", margin, cursorY);
+    doc.text("Detalhamento por Conjunto e Estrutura de Telhado:", margin, cursorY);
     cursorY += 6;
 
     project.equipmentBlocks.forEach((block, idx) => {
-      checkPageBreak(30);
+      checkPageBreak(35);
       const blockDc = (block.modulePowerW * block.moduleQty) / 1000;
       const blockAc = block.inverterPowerKw * block.inverterQty;
       const stringsDesc = block.strings.map((s, i) => `S${i + 1}: ${s.count} mód.`).join(' | ');
+      const structDesc = `${getStructureTypeLabel(block.structureType)} • ${block.roofPlaneName || `Água ${idx + 1}`}`;
+      const orientDesc = `Azimute: ${getAzimuthCardinalLabel(block.azimuth)} | Inclinação: ${block.tilt ?? 15}°`;
 
       autoTable(doc, {
         startY: cursorY,
         body: [
           [`Conjunto ${idx + 1}`, `${block.inverterBrand} ${block.inverterModel} (${block.inverterQty}x) + ${block.moduleQty}x ${block.moduleBrand} ${block.moduleModel}`],
           ['Strings', stringsDesc],
+          ['Estrutura', `${structDesc} (${orientDesc})`],
           ['Potência', `DC: ${blockDc.toFixed(2)} kWp | AC: ${blockAc.toFixed(2)} kW`],
         ],
         theme: 'grid',

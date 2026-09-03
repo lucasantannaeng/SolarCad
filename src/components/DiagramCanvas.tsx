@@ -1,18 +1,43 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ProjectState } from '@/types';
+/**
+ * Canvas de Diagramação Elétrica SolarCAD
+ * Suporta Diagrama Unifilar, Multifilar (NBR 5410), Topologia de Comunicação e String Mapping
+ *
+ * Créditos Técnicos e Referências:
+ * - QElectroTech (simbologia elétrica e topologia NBR 5410 / IEC 60617)
+ * - Maker.js / dxf-writer (AutoCAD Blocks e geração vetorial DXF)
+ * - OpenSolar (Mapeamento de strings e topologia fotovoltaica 2D)
+ */
+
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { ProjectState, EquipmentBlock } from '@/types';
 import { getProjectEngineeringStatus, getBlockEngineeringStatus } from '@/services/engineering';
 import { getCableForCurrent, getPhases, getDcCable } from '@/components/diagram/cableCalculations';
+import { getDiagramDimensions, buildTechnicalTableData, getNetworkDescription, getPhasesConductorLabel, PaperFormat } from '@/components/diagram/diagramLayoutV2';
+import { renderMultifilarDiagram } from '@/components/diagram/multifilarRenderer';
+import { renderCommunicationDiagram, drawCommunicationScheduleTable } from '@/components/diagram/communicationRenderer';
+import { StringRoofMapping } from '@/components/StringRoofMapping';
 import { generateSolarUnifilarDxf, downloadDxfFile } from '@/services/dxfExporter';
 import { jsPDF } from 'jspdf';
 import { Button } from '@/components/ui/button';
-import { InfoTrigger } from '@/components/InfoTrigger';
-import { Download, Image, ZoomIn, ZoomOut, RotateCcw, FileText } from 'lucide-react';
+import {
+  Download,
+  ZoomIn,
+  ZoomOut,
+  FileText,
+  Maximize2,
+  Zap,
+  Split,
+  Radio,
+  Home,
+} from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Props {
   projectData: ProjectState;
 }
 
-// ── Anchor point system ──
+export type DiagramViewMode = 'unifilar' | 'multifilar' | 'communication' | 'roof_mapping';
+
 interface Anchor {
   x: number;
   y: number;
@@ -26,82 +51,110 @@ interface Anchors {
   center?: Anchor;
 }
 
-// A4 Landscape in mm
-const PAGE_W = 297;
-const PAGE_H = 210;
-const MARGEM_ESQUERDA = 20;
-const MARGEM_PADRAO = 7;
-
-const SAFE_W = PAGE_W - MARGEM_ESQUERDA - MARGEM_PADRAO;
-const SELO_W = 175;
-const SELO_H = 32;
-const SELO_X = PAGE_W - MARGEM_PADRAO - SELO_W;
-const SELO_Y = PAGE_H - MARGEM_PADRAO - SELO_H;
-
-const DRAW_W = SAFE_W;
-const DRAW_H = SELO_Y - MARGEM_PADRAO;
-
-const DPI = 6;
-const TEXT_PAD = 1;
-const CONN_DOT_R = 1;
-
-// ── LINE WEIGHT HIERARCHY (in mm) ──
-const LW_POWER = 0.55;   // Barramentos, fios de potência, cabo principal
-const LW_SYMBOL = 0.30;  // Disjuntores, inversores, medidor, módulos, DPS
-const LW_FRAME = 0.40;   // Moldura externa e selo
-const LW_DETAIL = 0.15;  // Linhas de chamada, hachuras, símbolos finos
-const LW_GROUND = 0.45;  // Hastes do símbolo de aterramento NBR
-
-// ── MIN FONT SIZE for technical specs ──
-const MIN_SPEC_FONT = 2.5;
-
 export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [format, setFormat] = useState<PaperFormat>(() => {
+    if (projectData.paperSize === 'A4' || projectData.paperSize === 'A3') {
+      return projectData.paperSize;
+    }
+    const totalInvs = projectData.equipmentBlocks.reduce((acc, b) => acc + (b.inverterQty || 1), 0);
+    return totalInvs > 1 ? 'A3' : 'A4';
+  });
+  const [zoom, setZoom] = useState<number>(1);
+  const [fitMode, setFitMode] = useState<boolean>(true);
+  const [viewMode, setViewMode] = useState<DiagramViewMode>('unifilar');
 
-  const drawDiagram = () => {
+  const dims = getDiagramDimensions(format);
+  const DPI = format === 'A3' ? 5 : 6;
+
+  // ── Hierarquia de Espessuras de Linha (em mm) ──
+  const LW_POWER = 0.55;   // Barramentos, fios de potência, cabo principal
+  const LW_SYMBOL = 0.30;  // Disjuntores, inversores, medidor, módulos, DPS
+  const LW_FRAME = 0.40;   // Moldura externa e selo
+  const LW_DETAIL = 0.15;  // Linhas de chamada, caixas de equipamentos
+  const LW_GROUND = 0.40;  // Hastes de aterramento NBR
+
+  const drawDiagram = useCallback(() => {
+    if (viewMode === 'roof_mapping') return;
+
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = PAGE_W * DPI;
-    canvas.height = PAGE_H * DPI;
+    canvas.width = Math.round(dims.pageW * DPI);
+    canvas.height = Math.round(dims.pageH * DPI);
     ctx.scale(DPI, DPI);
 
-    // Global line style for smooth connections
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
+    // Fundo Branco
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, PAGE_W, PAGE_H);
+    ctx.fillRect(0, 0, dims.pageW, dims.pageH);
 
-    // ── MOLDURA ──
-    ctx.strokeStyle = '#000';
+    // ── 1. MOLDURA EXTERNA ABNT (Margem 20mm/25mm esquerda para encadernação) ──
+    ctx.strokeStyle = '#000000';
     ctx.lineWidth = LW_FRAME;
-    ctx.strokeRect(MARGEM_ESQUERDA, MARGEM_PADRAO, SAFE_W, PAGE_H - MARGEM_PADRAO * 2);
+    ctx.strokeRect(dims.marginL, dims.marginT, dims.safeW, dims.safeH);
 
-    // ── SELO ──
     const engResult = getProjectEngineeringStatus(projectData.equipmentBlocks, projectData.technical);
-    drawSelo(ctx, SELO_X, SELO_Y, engResult);
 
-    // ── TRANSLATE to safe drawing origin ──
+    // ── 2. SELO TÉCNICO ABNT ──
+    drawSelo(ctx, dims.seloX, dims.seloY, dims.seloW, dims.seloH, engResult);
+
+    // ── 3. TABELA TÉCNICA (BOM DE ELÉTRICA OU SCHEDULE DE TELEMETRIA) ──
+    if (viewMode === 'communication') {
+      drawCommunicationScheduleTable(ctx, dims.tableX, dims.tableY, dims.tableW, dims.tableH, projectData);
+    } else {
+      const tableData = buildTechnicalTableData(projectData);
+      drawTechnicalTable(ctx, dims.tableX, dims.tableY, dims.tableW, dims.tableH, tableData);
+    }
+
+    // ── 4. ÁREA DE DESENHO DO ESQUEMÁTICO ──
     ctx.save();
-    ctx.translate(MARGEM_ESQUERDA, MARGEM_PADRAO);
+    ctx.translate(dims.marginL, dims.marginT);
     ctx.beginPath();
-    ctx.rect(0, 0, DRAW_W, DRAW_H);
+    ctx.rect(0, 0, dims.drawW, dims.drawH);
     ctx.clip();
 
+    // Roteamento para Renderizador Multifilar (Modo 2)
+    if (viewMode === 'multifilar') {
+      renderMultifilarDiagram(ctx, {
+        dims,
+        projectData,
+        format,
+        DPI,
+        showCommunication: false,
+      });
+      ctx.restore();
+      return;
+    }
+
+    // Roteamento para Renderizador de Comunicação & Modbus (Modo 3)
+    if (viewMode === 'communication') {
+      renderCommunicationDiagram(ctx, {
+        dims,
+        projectData,
+        format,
+        DPI,
+      });
+      ctx.restore();
+      return;
+    }
+
+    // ── RENDERIZAÇÃO UNIFILAR PADRÃO NBR (Modo 1) ──
     const phases = getPhases(projectData.technical.connectionType);
+    const phasesLabel = getPhasesConductorLabel(projectData.technical.connectionType);
+    const networkDesc = getNetworkDescription(projectData.technical.connectionType, projectData.technical.voltage);
 
-    // ══════════════════════════════════════════════════════
-    // ── DRAWING PRIMITIVES (all return Anchors) ──
-    // ══════════════════════════════════════════════════════
-
+    // Primitivas de Desenho
     const drawConnDot = (x: number, y: number) => {
       ctx.save();
-      ctx.fillStyle = '#000';
+      ctx.fillStyle = '#000000';
       ctx.beginPath();
-      ctx.arc(x, y, CONN_DOT_R, 0, 2 * Math.PI);
+      ctx.arc(x, y, 0.9, 0, 2 * Math.PI);
       ctx.fill();
       ctx.restore();
     };
@@ -110,42 +163,22 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
       text: string,
       x: number,
       y: number,
-      opts?: { align?: CanvasTextAlign; font?: string; bold?: boolean; spec?: boolean; noMask?: boolean }
+      opts?: { align?: CanvasTextAlign; font?: string; bold?: boolean }
     ) => {
       ctx.save();
-      const rawFont = opts?.font || '2.5px Arial';
-      // Parse "<size>px Arial" → enforce minimum for spec labels
-      const sizeMatch = rawFont.match(/([\d.]+)px\s+(.+)/);
-      let parsedSize = sizeMatch ? parseFloat(sizeMatch[1]) : 2.5;
-      const family = sizeMatch ? sizeMatch[2] : 'Arial';
-      if (opts?.spec) parsedSize = Math.max(parsedSize, MIN_SPEC_FONT);
-      const finalFont = `${parsedSize}px ${family}`;
-      ctx.font = opts?.bold ? `bold ${finalFont}` : finalFont;
+      const defaultFont = format === 'A3' ? '2.6px Arial' : '2.2px Arial';
+      const baseFont = opts?.font || defaultFont;
+      ctx.font = opts?.bold ? `bold ${baseFont}` : baseFont;
       ctx.textAlign = opts?.align || 'left';
-
-      // Text Halo (contorno branco) — substitui a caixa branca para não amputar o desenho
-      if (!opts?.noMask) {
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = Math.max(parsedSize * 0.4, 0.8);
-        ctx.lineJoin = 'round';
-        ctx.miterLimit = 2;
-        ctx.strokeText(text, x, y);
-      }
-
-      // Texto principal em preto
       ctx.fillStyle = '#000000';
       ctx.fillText(text, x, y);
       ctx.restore();
     };
 
-    // ── drawConnection: routes a wire between two anchors using 90° bends (POWER weight) ──
     const drawConnection = (from: Anchor, to: Anchor, opts?: { dot?: 'start' | 'end' | 'both' | 'none'; weight?: number }) => {
       ctx.save();
-      // Garante linha preta sólida e espessura de potência (eliminando heranças de #555/dashed)
       ctx.strokeStyle = '#000000';
       ctx.setLineDash([]);
-      ctx.lineCap = 'square';
-      ctx.lineJoin = 'miter';
       ctx.lineWidth = opts?.weight ?? LW_POWER;
       ctx.beginPath();
       if (from.x === to.x || from.y === to.y) {
@@ -164,19 +197,18 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
       if (dotMode === 'end' || dotMode === 'both') drawConnDot(to.x, to.y);
     };
 
-    // ── drawModule: returns anchors ──
     const drawModule = (x: number, y: number, w: number, h: number): Anchors => {
       ctx.save();
       ctx.lineWidth = LW_SYMBOL;
       ctx.strokeRect(x, y, w, h);
       ctx.beginPath();
-      ctx.moveTo(x, y + h - 1.5);
-      ctx.lineTo(x + w, y + 1.5);
+      ctx.moveTo(x, y + h - 1.8);
+      ctx.lineTo(x + w, y + 1.8);
       ctx.stroke();
-      ctx.font = '2px Arial';
-      ctx.fillStyle = '#000';
-      ctx.fillText('+', x + 0.5, y + 2.5);
-      ctx.fillText('−', x + w - 1.5, y + h - 0.8);
+      ctx.font = '2.0px Arial';
+      ctx.fillStyle = '#000000';
+      ctx.fillText('+', x + 0.6, y + 2.5);
+      ctx.fillText('−', x + w - 1.8, y + h - 0.8);
       ctx.restore();
       return {
         top: { x: x + w / 2, y },
@@ -187,27 +219,25 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
       };
     };
 
-    // ── drawFuse: returns left/right anchors ──
     const drawFuse = (x: number, y: number): Anchors => {
-      const w = 5, h = 2;
+      const w = 5.5, h = 2.2;
       ctx.save();
       ctx.lineWidth = LW_SYMBOL;
       ctx.strokeRect(x - w / 2, y - h / 2, w, h);
-      const leftAnchor = { x: x - w / 2 - 1.5, y };
-      const rightAnchor = { x: x + w / 2 + 1.5, y };
+      const leftAnchor = { x: x - w / 2 - 1.2, y };
+      const rightAnchor = { x: x + w / 2 + 1.2, y };
       ctx.beginPath(); ctx.moveTo(x - w / 2, y); ctx.lineTo(leftAnchor.x, leftAnchor.y); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(x + w / 2, y); ctx.lineTo(rightAnchor.x, rightAnchor.y); ctx.stroke();
       ctx.restore();
       return { left: leftAnchor, right: rightAnchor, center: { x, y } };
     };
 
-    // ── drawSwitch: returns left/right anchors ──
     const drawSwitch = (x: number, y: number): Anchors => {
       ctx.save();
       ctx.lineWidth = LW_SYMBOL;
       const r = 0.7;
-      const leftA = { x: x - 3, y };
-      const rightA = { x: x + 3, y };
+      const leftA = { x: x - 3.0, y };
+      const rightA = { x: x + 3.0, y };
       ctx.beginPath(); ctx.arc(leftA.x, leftA.y, r, 0, 2 * Math.PI); ctx.fill();
       ctx.beginPath(); ctx.arc(rightA.x, rightA.y, r, 0, 2 * Math.PI); ctx.fill();
       ctx.beginPath(); ctx.moveTo(leftA.x, leftA.y); ctx.lineTo(x + 2.5, y - 2.5); ctx.stroke();
@@ -215,15 +245,14 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
       return { left: leftA, right: rightA, center: { x, y } };
     };
 
-    // ── drawBreaker: returns top/bottom anchors ──
     const drawBreaker = (x: number, y: number, poles: number): Anchors => {
       ctx.save();
       ctx.lineWidth = LW_SYMBOL;
-      const spacing = 1.8;
+      const spacing = 2.0;
       const startX = x - ((poles - 1) * spacing) / 2;
       for (let i = 0; i < poles; i++) {
         const px = startX + i * spacing;
-        ctx.beginPath(); ctx.moveTo(px, y - 3); ctx.lineTo(px, y + 3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(px, y - 3.0); ctx.lineTo(px, y + 3.0); ctx.stroke();
         ctx.beginPath(); ctx.arc(px - 0.8, y, 0.5, 0, 2 * Math.PI); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(px - 0.8, y - 0.8); ctx.lineTo(px + 0.8, y + 0.8); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(px + 0.8, y - 0.8); ctx.lineTo(px - 0.8, y + 0.8); ctx.stroke();
@@ -231,68 +260,62 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
       if (poles > 1) {
         ctx.lineWidth = LW_DETAIL;
         ctx.beginPath();
-        ctx.moveTo(startX, y - 3);
-        ctx.lineTo(startX + (poles - 1) * spacing, y - 3);
+        ctx.moveTo(startX, y - 3.0);
+        ctx.lineTo(startX + (poles - 1) * spacing, y - 3.0);
         ctx.stroke();
       }
       ctx.restore();
       return {
-        top: { x, y: y - 3 },
-        bottom: { x, y: y + 3 },
+        top: { x, y: y - 3.0 },
+        bottom: { x, y: y + 3.0 },
         center: { x, y },
       };
     };
 
-    // ── drawGround: NBR standard — vertical stem + 3 decreasing horizontal lines ──
     const drawGround = (x: number, y: number): Anchors => {
-      const topA = { x, y };
       ctx.save();
       ctx.lineWidth = LW_GROUND;
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 2.5); ctx.stroke();
-      ctx.lineWidth = LW_GROUND;
-      ctx.beginPath(); ctx.moveTo(x - 3, y + 2.5); ctx.lineTo(x + 3, y + 2.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - 3.0, y + 2.5); ctx.lineTo(x + 3.0, y + 2.5); ctx.stroke();
       ctx.lineWidth = LW_SYMBOL;
-      ctx.beginPath(); ctx.moveTo(x - 2, y + 3.5); ctx.lineTo(x + 2, y + 3.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - 2.0, y + 3.5); ctx.lineTo(x + 2.0, y + 3.5); ctx.stroke();
       ctx.lineWidth = LW_DETAIL;
-      ctx.beginPath(); ctx.moveTo(x - 1, y + 4.5); ctx.lineTo(x + 1, y + 4.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x - 1.0, y + 4.5); ctx.lineTo(x + 1.0, y + 4.5); ctx.stroke();
       ctx.restore();
-      return { top: topA };
+      return { top: { x, y } };
     };
 
-    // ── drawDPS: returns top anchor ──
     const drawDPS = (x: number, y: number, label: string): Anchors => {
-      const w = 4, h = 7;
-      const topA = { x, y };
+      const w = 4.5, h = 7.0;
       ctx.save();
       ctx.lineWidth = LW_SYMBOL;
       ctx.strokeRect(x - w / 2, y, w, h);
-      ctx.beginPath(); ctx.moveTo(x, y + h); ctx.lineTo(x, y + h + 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, y + h); ctx.lineTo(x, y + h + 2.0); ctx.stroke();
       ctx.restore();
-      drawGround(x, y + h + 2);
+      drawGround(x, y + h + 2.0);
       if (label) {
-        drawLabel(label, x, y - 1.5, { align: 'center', font: '2.5px Arial', spec: true });
+        drawLabel(label, x, y - 1.2, { align: 'center', font: '1.7px Arial' });
       }
-      return { top: topA, bottom: { x, y: y + h } };
+      return { top: { x, y }, bottom: { x, y: y + h } };
     };
 
-    // ── drawInverter: returns all anchors ──
     const drawInverter = (x: number, y: number, w: number, h: number): Anchors => {
       ctx.save();
       ctx.lineWidth = LW_SYMBOL;
-      ctx.fillStyle = '#FFF';
+      ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(x, y, w, h);
       ctx.strokeRect(x, y, w, h);
       ctx.beginPath();
       ctx.moveTo(x, y + h);
       ctx.lineTo(x + w, y);
       ctx.stroke();
-      ctx.font = 'bold 2.5px Arial';
-      ctx.fillStyle = '#000';
-      ctx.fillText('CC', x + 1, y + 4);
-      ctx.fillText('CA', x + w - 4.5, y + h - 1.5);
-      ctx.font = 'bold 2px Arial';
-      ctx.fillText('=', x + 2, y + h - 2);
-      ctx.fillText('~', x + w - 3, y + 3);
+      ctx.font = 'bold 2.4px Arial';
+      ctx.fillStyle = '#000000';
+      ctx.fillText('CC', x + 1.2, y + 3.8);
+      ctx.fillText('CA', x + w - 4.8, y + h - 1.6);
+      ctx.font = 'bold 2.0px Arial';
+      ctx.fillText('=', x + 2.0, y + h - 2.0);
+      ctx.fillText('~', x + w - 3.0, y + 3.0);
       ctx.restore();
       return {
         top: { x: x + w / 2, y },
@@ -303,718 +326,652 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
       };
     };
 
-    const drawWiringSymbols = (x: number, y: number, p: number) => {
-      const h = 3, sp = 1.2;
-      let sx = x - (p * sp) / 2;
+    // Placa de Advertência Obrigatória NBR 16690
+    const drawWarningPlate = (x: number, y: number, w: number, h: number) => {
       ctx.save();
+      ctx.fillStyle = '#FEF08A';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = LW_POWER;
+      ctx.strokeRect(x, y, w, h);
       ctx.lineWidth = LW_DETAIL;
-      for (let i = 0; i < p; i++) {
-        ctx.beginPath(); ctx.moveTo(sx, y - h / 2); ctx.lineTo(sx, y + h / 2); ctx.stroke();
-        sx += sp;
-      }
-      sx += sp;
-      ctx.beginPath();
-      ctx.moveTo(sx, y - h / 2); ctx.lineTo(sx, y + h / 2);
-      ctx.lineTo(sx + 1, y - h / 2);
-      ctx.stroke();
-      sx += sp + 0.8;
-      ctx.beginPath();
-      ctx.moveTo(sx, y - h / 2); ctx.lineTo(sx, y + h / 2);
-      ctx.moveTo(sx - 0.8, y - h / 2); ctx.lineTo(sx + 0.8, y - h / 2);
-      ctx.stroke();
-      ctx.restore();
-    };
+      ctx.strokeRect(x + 0.6, y + 0.6, w - 1.2, h - 1.2);
 
-    const drawAnsiBlocks = (x: number, y: number) => {
-      const codes = ["27", "59", "25", "81O", "81U"];
-      const boxSize = 5;
-      const gap = 0.8;
-      ctx.save();
-      ctx.lineWidth = LW_SYMBOL;
-      codes.forEach((code, i) => {
-        const yPos = y + i * (boxSize + gap);
-        ctx.fillStyle = '#FFF';
-        ctx.fillRect(x, yPos, boxSize, boxSize);
-        ctx.strokeRect(x, yPos, boxSize, boxSize);
-        ctx.fillStyle = '#000';
-        ctx.font = 'bold 2.5px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(code, x + boxSize / 2, yPos + boxSize / 2 + 0.9);
-      });
+      // Ícone Triângulo
+      const iconX = x + 4.5;
+      const iconY = y + h / 2;
+      ctx.beginPath();
+      ctx.moveTo(iconX, iconY - 3.5);
+      ctx.lineTo(iconX - 3.5, iconY + 3.0);
+      ctx.lineTo(iconX + 3.5, iconY + 3.0);
+      ctx.closePath();
+      ctx.fillStyle = '#EAB308';
+      ctx.fill();
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 0.25;
+      ctx.stroke();
+
+      ctx.fillStyle = '#000000';
+      ctx.font = 'bold 2.0px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('!', iconX, iconY + 2.2);
+
+      // Textos de advertência
       ctx.textAlign = 'left';
+      ctx.font = 'bold 1.7px Arial';
+      ctx.fillStyle = '#991B1B';
+      ctx.fillText('CUIDADO: RISCO DE CHOQUE ELÉTRICO', iconX + 4.0, y + 3.8);
+      ctx.font = 'bold 1.4px Arial';
+      ctx.fillStyle = '#000000';
+      ctx.fillText('GERAÇÃO PRÓPRIA (FONTE SOLAR FV) - NBR 16690', iconX + 4.0, y + 7.2);
       ctx.restore();
     };
 
+    // Caixa Técnica de Proteções Integradas do Inversor (Exibida uma única vez no esquema)
+    const drawInverterProtectionsBadge = (x: number, y: number, w: number, h: number) => {
+      ctx.save();
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = '#94A3B8';
+      ctx.lineWidth = LW_DETAIL;
+      ctx.strokeRect(x, y, w, h);
 
-    const clampX = (v: number) => Math.max(1, Math.min(v, DRAW_W - 1));
-    const clampY = (v: number) => Math.max(1, Math.min(v, DRAW_H - 1));
-
-    // ══════════════════════════════════════════════════════
-    // ── BLOCK FLOWCHART ──
-    // ══════════════════════════════════════════════════════
-    const drawBlockFlowchart = () => {
-      const x = 2, y = 2, boxW = 22, boxH = 7, gap = 6;
-      const boxes = ["Geração", "Proteção", "Medição", "Rede"];
-      ctx.font = 'bold 3px Arial';
-      ctx.fillStyle = '#000';
-      ctx.fillText("DIAGRAMA DE BLOCOS:", x, y + 3);
-      let cx = x;
-      const startY = y + 6;
-      boxes.forEach((text, i) => {
-        ctx.fillStyle = '#FFF';
-        ctx.fillRect(cx, startY, boxW, boxH);
-        ctx.strokeRect(cx, startY, boxW, boxH);
-        ctx.fillStyle = '#000';
-        ctx.font = '2.8px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(text, cx + boxW / 2, startY + boxH / 2 + 1);
-        ctx.textAlign = 'left';
-        if (i < boxes.length - 1) {
-          const arrowStart = { x: cx + boxW, y: startY + boxH / 2 };
-          const arrowEnd = { x: cx + boxW + gap, y: startY + boxH / 2 };
-          drawConnection(arrowStart, arrowEnd);
-          ctx.beginPath();
-          ctx.moveTo(arrowEnd.x, arrowEnd.y);
-          ctx.lineTo(arrowEnd.x - 1.5, arrowEnd.y - 1);
-          ctx.lineTo(arrowEnd.x - 1.5, arrowEnd.y + 1);
-          ctx.fill();
-        }
-        cx += boxW + gap;
+      drawLabel('PROTEÇÕES INTEGRADAS DO INVERSOR (NBR IEC 62116)', x + w / 2, y + 2.8, {
+        align: 'center',
+        bold: true,
+        font: format === 'A3' ? '1.7px Arial' : '1.4px Arial',
       });
+      drawLabel('Anti-ilhamento | ANSI 59 (Sobretensão) | ANSI 27 (Subtensão)', x + w / 2, y + 5.8, {
+        align: 'center',
+        font: format === 'A3' ? '1.4px Arial' : '1.2px Arial',
+      });
+      drawLabel('ANSI 81O/U (Frequência 59.5-60.5Hz) | ANSI 25 (Sincronismo)', x + w / 2, y + 8.8, {
+        align: 'center',
+        font: format === 'A3' ? '1.4px Arial' : '1.2px Arial',
+      });
+      ctx.restore();
     };
 
-    drawBlockFlowchart();
+    // ── ZONEAMENTO VERTICAL PARAMÉTRICO ──
+    const zoneH = dims.drawH;
+    const ccTop = 10;
+    const ccBot = zoneH * 0.30;
+    const convTop = zoneH * 0.36;
+    const convBot = zoneH * 0.58;
+    const caTop = zoneH * 0.64;
+    const mainBusY = zoneH * 0.86;
 
-    // ══════════════════════════════════════════════════════
-    // ── ZONE DEFINITIONS ──
-    // ══════════════════════════════════════════════════════
-    const maxDrawH = DRAW_H;
-    const ccTop = 20;
-    const ccBot = 52;
-    const convTop = 57;
-    const convBot = 95;
-    const caTop = 122;
-    const caBot = Math.min(160, maxDrawH - 8);
-    const mainBusY = Math.min(168, maxDrawH - 15);
-
+    // Expandir blocos de inversores
     const blocks = projectData.equipmentBlocks;
-
-    // ── 1. FLATTEN: expand inverterQty into physical inverter instances ──
-    interface PhysicalInverter {
-      block: typeof blocks[0];
-      bIdx: number;
-      invIdx: number;
-    }
-    const physicalInverters: PhysicalInverter[] = [];
+    const physicalInverters: { block: EquipmentBlock; bIdx: number; invIdx: number }[] = [];
     blocks.forEach((block, bIdx) => {
       const qty = block.inverterQty || 1;
       for (let i = 0; i < qty; i++) {
         physicalInverters.push({ block, bIdx, invIdx: i });
       }
     });
+
     const numInvs = physicalInverters.length;
-    const colWidth = (DRAW_W - 4) / Math.max(numInvs, 1);
+    const availableW = dims.drawW - 65;
+    const colWidth = Math.max(45, availableW / Math.max(numInvs, 1));
+    const caEntryPoints: { centerX: number; caEntryAnchor: Anchor }[] = [];
 
-    const caEntryPoints: { centerX: number; caEntryAnchor: Anchor; blockCable: ReturnType<typeof getCableForCurrent>; blockPhases: number }[] = [];
-    let sharedTrunkData: { troncoX: number; sharedCable: ReturnType<typeof getCableForCurrent>; sharedPhases: number } | null = null;
-
-    // ── 2. DRAW each physical inverter column (CC + Conversion zones) ──
+    // Desenhar colunas dos inversores
     physicalInverters.forEach((phys, pIdx) => {
       const { block, bIdx, invIdx } = phys;
-      const bx = 2 + pIdx * colWidth;
-      const bw = colWidth - 4;
-      const centerX = clampX(bx + bw / 2);
-
-      const blockEng = getBlockEngineeringStatus(block, projectData.technical);
-      const blockCable = getCableForCurrent(blockEng.nominalCurrent, projectData.technical);
-      const blockPhases = block.inverter.outputPhases === 3 ? 3 : (block.inverter.outputPhases === 2 ? 2 : phases);
-
-      // ── ZONE CC: Modules + StringBox (only draw for invIdx === 0 to avoid duplicate strings) ──
-      const numStrings = block.strings.length;
-      const moduleW = 5;
-      const moduleH = 8;
-      const stringSpacing = Math.min(12, (ccBot - ccTop - moduleH) / Math.max(numStrings, 1));
-      const stringsStartY = ccTop + ((ccBot - ccTop) - (numStrings - 1) * stringSpacing) / 2;
-
-      const dcBusX = clampX(bx + bw * 0.35);
-
+      const bx = 6 + pIdx * colWidth;
+      const centerX = bx + colWidth / 2;
       const isMicro = block.inverter?.inverterType === 'micro';
+      const blockEng = getBlockEngineeringStatus(block, projectData.technical);
+      const pwr = block.modulePowerW || block.module?.power || 0;
+      const pmpKwp = ((block.moduleQty * pwr) / 1000).toFixed(2);
+      const brand = (block.moduleBrand || block.module?.brand || 'PV').toUpperCase();
+      const model = (block.moduleModel || block.module?.model || '').toUpperCase();
+      const voc = (block.module?.voc || 0).toFixed(1);
+      const isc = (block.module?.isc || 0).toFixed(1);
 
+      const invBrand = (block.inverterBrand || block.inverter?.brand || 'INV').toUpperCase();
+      const invModel = (block.inverterModel || block.inverter?.model || '').toUpperCase();
+      const invPwr = (block.inverterPowerKw || block.inverter?.power || 0).toFixed(1);
+      const inom = blockEng.nominalCurrent.toFixed(1);
+
+      const avgModsPerStr = Math.round(block.moduleQty / Math.max(block.strings.length, 1));
+      const vmpStr = avgModsPerStr * (block.module?.vmp || 0);
+      const dcDist = projectData.technical.dcCableDistance || 15;
+      const dcCable = getDcCable(block.module?.isc || 13, 1, vmpStr, dcDist);
+      const blockCable = getCableForCurrent(blockEng.nominalCurrent, projectData.technical);
+
+      // ── ZONA CC ──
+      const modW = 6, modH = 9.5;
       if (isMicro) {
-        // ── ZONE CC (MICROINVERSOR): Módulos com conexão direta MC4 ao micro (Sem StringBox) ──
         const modsPerMicro = Math.max(1, Math.round(block.moduleQty / Math.max(block.inverterQty || 1, 1)));
-        const moduleW = 5;
-        const moduleH = 8;
-        const modSpacing = 6;
-        const totalModsW = modsPerMicro * moduleW + (modsPerMicro - 1) * (modSpacing - moduleW);
-        const startModX = centerX - (modsPerMicro > 1 ? 4 : moduleW / 2);
+        const startModX = centerX - ((modsPerMicro - 1) * 7.5) / 2;
 
-        // Desenha módulos do micro
         for (let m = 0; m < Math.min(modsPerMicro, 4); m++) {
-          const mx = clampX(startModX + m * 7);
-          const my = ccTop + 4;
-          const modAnch = drawModule(mx, my, moduleW, moduleH);
-
-          if (m === 0) {
-            drawLabel(`${block.moduleBrand || 'PV'} ${block.moduleModel || ''}`, mx, my - 5, { font: '2.2px Arial', spec: true });
-            drawLabel(`${block.modulePowerW}W`, mx, my - 2, { font: '2.2px Arial', spec: true });
-          }
-
-          // Conexão CC direta MC4 descendo para o microinversor
-          const dcDropBottom: Anchor = { x: modAnch.bottom!.x, y: convTop + 2 };
-          drawConnection(modAnch.bottom!, dcDropBottom, { dot: 'start', weight: 0.35 });
+          const mx = startModX + m * 7.5;
+          const my = ccTop + 4.5;
+          const modAnch = drawModule(mx - modW / 2, my, modW, modH);
+          drawConnection(modAnch.bottom!, { x: modAnch.bottom!.x, y: convTop - 3 }, { dot: 'start', weight: 0.35 });
         }
 
-        drawLabel(`${modsPerMicro}x Módulos (MC4 Plug&Play)`, centerX, (ccTop + ccBot) / 2 + 3, { align: 'center', font: '1.8px Arial', spec: true });
-        drawLabel('Entrada CC Baixa Tensão (<60V)', centerX, (ccTop + ccBot) / 2 + 6.5, { align: 'center', font: '1.6px Arial', spec: true });
-        drawLabel('Sem String Box Externa', centerX, (ccTop + ccBot) / 2 + 10, { align: 'center', font: '1.5px Arial', spec: true });
-
+        drawLabel(`MOD-${bIdx + 1}: ${modsPerMicro}x ${brand} ${model} (${pwr}W)`, centerX, ccTop + 0.8, { align: 'center', bold: true, font: '1.9px Arial' });
+        drawLabel(`Pmp: ${((modsPerMicro * pwr) / 1000).toFixed(2)} kWp | Voc: ${voc}V | Isc: ${isc}A`, centerX, ccTop + 3.0, { align: 'center', font: '1.6px Arial' });
+        drawLabel('C-CC: 4mm² (1,8kV) Plug&Play | ΔV: <1%', centerX, (ccTop + ccBot) / 2 + 4, { align: 'center', font: '1.5px Arial' });
       } else if (invIdx === 0) {
-        // Draw strings only once per block (first physical inverter of that block)
+        const numStrings = block.strings.length;
+        const stringSpacing = Math.min(13, (ccBot - ccTop - modH) / Math.max(numStrings, 1));
+        const stringsStartY = ccTop + ((ccBot - ccTop) - (numStrings - 1) * stringSpacing) / 2 + 2;
+        const dcBusX = bx + colWidth * 0.38;
+
         block.strings.forEach((str, sIdx) => {
-          const sy = clampY(stringsStartY + sIdx * stringSpacing);
-          const mx = clampX(bx + 3);
+          const sy = stringsStartY + sIdx * stringSpacing;
+          const mx = bx + 3;
+          const modAnch = drawModule(mx, sy - modH / 2, modW, modH);
 
-          const modAnch = drawModule(mx, sy - moduleH / 2, moduleW, moduleH);
-
+          // Rótulo posicionado estritamente acima do módulo sem colidir com linhas CC
           if (sIdx === 0) {
-            // Consolida Nome e Potência ACIMA do primeiro módulo (evita colisão com os de baixo)
-            drawLabel(`${block.moduleBrand || 'PV'} ${block.moduleModel || ''}`, mx, sy - moduleH / 2 - 5, { font: '2.2px Arial', spec: true });
-            drawLabel(`${block.modulePowerW}W`, mx, sy - moduleH / 2 - 2, { font: '2.2px Arial', spec: true });
+            drawLabel(`MOD-${bIdx + 1}: ${block.moduleQty}x ${brand} ${model} (${pwr}W)`, mx + modW / 2, sy - modH / 2 - 4.2, { align: 'center', bold: true, font: '1.9px Arial' });
+            drawLabel(`Pmp: ${pmpKwp} kWp | Voc: ${voc}V | Isc: ${isc}A`, mx + modW / 2, sy - modH / 2 - 1.8, { align: 'center', font: '1.6px Arial' });
           }
-          drawLabel(`S${sIdx + 1}: ${str.count} mód.`, mx + moduleW + 2, sy - 1, { font: '2.5px Arial', spec: true });
+          drawLabel(`STR-${sIdx + 1}: ${str.count}x`, mx + modW + 1.2, sy - 1.2, { font: '1.6px Arial' });
 
-          const fuseX = mx + moduleW + 6.5;
-          const fuseAnch = drawFuse(fuseX, sy);
+          const fuseAnch = drawFuse(mx + modW + 12, sy);
+          drawLabel(`${blockEng.dcProtection.fuseRating || 15}A CC`, mx + modW + 12, sy - 2.5, { align: 'center', font: '1.4px Arial' });
           drawConnection(modAnch.right!, fuseAnch.left!, { dot: 'start' });
-
-          const busAnchor: Anchor = { x: dcBusX, y: sy };
-          drawConnection(fuseAnch.right!, busAnchor, { dot: 'end' });
-
-          if (sIdx === 0) {
-            // Cabo CC calculado: getDcCable(Isc, strings paralelas, Vmp string, distância)
-            const avgModulesPerString = Math.round(block.moduleQty / Math.max(numStrings, 1));
-            const vmpString = avgModulesPerString * (block.module.vmp || 0);
-            const dcDist = projectData.technical.dcCableDistance || 15;
-            const dcCable = getDcCable(block.module.isc, 1, vmpString, dcDist);
-            drawLabel(dcCable.label, fuseAnch.center!.x, sy - 3.5, { align: 'center', font: '2.5px Arial', spec: true });
-            // Fusível CC com valor calculado
-            const fuseLabel = blockEng.dcProtection.fuseRequired
-              ? `Fus. ${blockEng.dcProtection.fuseRating}A ${blockEng.dcProtection.fuseVoltage}V`
-              : `Fus. ${blockEng.dcProtection.fuseRating}A`;
-            drawLabel(fuseLabel, fuseAnch.center!.x, sy + 3.5, { align: 'center', font: '2px Arial', spec: true });
-          }
+          drawConnection(fuseAnch.right!, { x: dcBusX, y: sy }, { dot: 'end' });
         });
 
-        // DC Bus vertical line
         if (numStrings > 1) {
-          const busTop: Anchor = { x: dcBusX, y: stringsStartY };
-          const busBot: Anchor = { x: dcBusX, y: stringsStartY + (numStrings - 1) * stringSpacing };
-          const prevLW = ctx.lineWidth;
-          ctx.lineWidth = 0.5;
-          drawConnection(busTop, busBot);
-          ctx.lineWidth = prevLW;
+          drawConnection({ x: dcBusX, y: stringsStartY }, { x: dcBusX, y: stringsStartY + (numStrings - 1) * stringSpacing });
         }
 
-        // DC switch on bus
-        const midCC = (ccTop + ccBot) / 2;
-        const switchAnchor: Anchor = { x: dcBusX + 5, y: midCC };
-        const dcBusMidAnchor: Anchor = { x: dcBusX, y: midCC };
-        drawConnection(dcBusMidAnchor, { x: switchAnchor.x - 3, y: midCC });
-        const swAnch = drawSwitch(switchAnchor.x, midCC);
+        const midCC = (ccTop + ccBot) / 2 + 1;
+        const swAnch = drawSwitch(dcBusX + 6, midCC);
+        drawLabel('Chave Secc. 32A 1000V CC', dcBusX + 6, midCC - 2.8, { align: 'center', font: '1.4px Arial' });
+        drawConnection({ x: dcBusX, y: midCC }, swAnch.left!);
 
-        // DPS CC
-        const dpsCCx = clampX(dcBusX + 12);
-        const dpsCCbus: Anchor = { x: dpsCCx, y: midCC };
-        drawConnection(swAnch.right!, dpsCCbus, { dot: 'end' });
-        const dpsDown: Anchor = { x: dpsCCx, y: midCC + 6 };
-        drawConnection(dpsCCbus, dpsDown);
-        drawDPS(dpsCCx, midCC + 6, `DPS CC ${blockEng.dcProtection.dpsClass} ${blockEng.dcProtection.dpsVoltage}V`);
+        const dpsX = dcBusX + 15;
+        drawConnection(swAnch.right!, { x: dpsX, y: midCC }, { dot: 'end' });
+        drawDPS(dpsX, midCC + 3, `DPS CC Cl.II 1000V (SB-${bIdx + 1})`);
 
-        // Vertical line: DC zone → Inverter
-        const invEntryX = centerX;
-        const dcExitAnchor: Anchor = { x: dpsCCx + 6, y: midCC };
-        const invTopAnchor: Anchor = { x: invEntryX, y: convTop + 2 };
-        drawConnection(swAnch.right!, { x: dpsCCx + 6, y: midCC });
-        drawConnection(dcExitAnchor, invTopAnchor, { dot: 'end' });
-      } else {
-        // For additional physical inverters of the same block, draw a shared DC bus tap
-        const midCC = (ccTop + ccBot) / 2;
-        // Draw a label indicating shared string box
-        drawLabel(`(INV ${invIdx + 1}/${block.inverterQty || 1})`, centerX, ccTop + 5, { align: 'center', font: '2.5px Arial', spec: true });
-        // Draw vertical line from DC zone down to inverter
-        const invTopAnchor: Anchor = { x: centerX, y: convTop + 2 };
-        const dcTapAnchor: Anchor = { x: centerX, y: ccBot - 2 };
-        drawConnection(dcTapAnchor, invTopAnchor, { dot: 'end' });
-        // Horizontal tap from original DC bus
-        const origDcBusX = clampX((2 + (pIdx - invIdx) * colWidth) + (colWidth - 4) * 0.35);
-        drawConnection({ x: origDcBusX, y: midCC }, { x: centerX, y: midCC }, { dot: 'start' });
-        drawConnection({ x: centerX, y: midCC }, dcTapAnchor);
+        const dcExitX = dpsX + 6;
+        drawConnection(swAnch.right!, { x: dcExitX, y: midCC });
+        drawConnection({ x: dcExitX, y: midCC }, { x: centerX, y: convTop - 3 }, { dot: 'end' });
+        drawLabel(`C-CC: ${dcCable.section}mm² (1,8kV) | ΔV: ${dcCable.voltageDrop.toFixed(1)}%`, centerX + 1.5, (midCC + convTop) / 2, { font: '1.5px Arial' });
       }
 
-      // ── ZONE CONVERSION: Inverter ──
-      const invW = 15;
-      const invH = 12;
+      // ── ZONA CONVERSÃO: INVERSOR ──
+      const invW = 16, invH = 13;
       const invX = centerX - invW / 2;
-      const invY = convTop + ((convBot - convTop) - invH) / 2;
-
+      const invY = convTop + ((convBot - convTop) - invH) / 2 + 2;
       const invAnch = drawInverter(invX, invY, invW, invH);
 
-      const invPrefix = isMicro ? 'MICRO' : 'INV';
-      const invLabel = (block.inverterQty || 1) > 1
-        ? `${block.inverterBrand || invPrefix} ${block.inverterModel || ''} #${invIdx + 1}`
-        : `${block.inverterBrand || invPrefix} ${block.inverterModel || ''}`;
-      // Textos do Inversor deslocados para a ESQUERDA do componente
-      const textRightX = invX - 3; // 3mm de respiro da borda esquerda do inversor
-      const textMidY = invY + (invH / 2); // Centralizado verticalmente
-      drawLabel(invLabel, textRightX, textMidY - 2, { align: 'right', font: '2.6px Arial', bold: true, spec: true });
-      drawLabel(`${block.inverterPowerKw}kW`, textRightX, textMidY + 2, { align: 'right', font: '2.5px Arial', spec: true });
+      const tagInv = isMicro ? `MICRO-${bIdx + 1}` : `INV-${bIdx + 1}${numInvs > 1 ? `.#${invIdx + 1}` : ''}`;
+      
+      // Textos do Inversor posicionados sem que a linha CC corte o texto
+      drawLabel(`${tagInv}: ${invBrand} ${invModel} (${invPwr} kW)`, centerX + 2.0, invY - 4.5, { font: '2.0px Arial', bold: true });
+      drawLabel(`Inom: ${inom}A | Vca: ${projectData.technical.voltage}`, centerX + 2.0, invY - 1.8, { font: '1.6px Arial' });
 
-      // Connect DC line to inverter top
-      const invTopAnchorFinal: Anchor = { x: centerX, y: convTop + 2 };
-      drawConnection(invTopAnchorFinal, invAnch.top!, { dot: 'both' });
+      // Conexão CC desce limpa diretamente no topo do inversor
+      drawConnection({ x: centerX, y: convTop - 3 }, invAnch.top!, { dot: 'both' });
+      drawGround(invX - 3.5, invY + invH / 2);
 
-      // Ground at inverter base
-      drawGround(centerX, invAnch.bottom!.y);
-
-      // ANSI blocks
-      drawAnsiBlocks(clampX(invX + invW + 3), invY);
-
-      // ── Inverter output → CA zone ──
-      const invOutBottom: Anchor = { x: centerX, y: invAnch.bottom!.y + 5 };
-      const caEntryAnchor: Anchor = { x: centerX, y: caTop + 2 };
-      drawConnection(invOutBottom, caEntryAnchor, { dot: 'both' });
-
-      caEntryPoints.push({ centerX, caEntryAnchor, blockCable, blockPhases });
-    });
-
-    // ══════════════════════════════════════════════════════
-    // ── SHARED CA BOX (Centralized Vertical Trunk) ──
-    // ══════════════════════════════════════════════════════
-    if (caEntryPoints.length > 0) {
-      const sharedCable = caEntryPoints[0].blockCable;
-      const sharedPhases = Math.max(...caEntryPoints.map(p => p.blockPhases));
-      const allEntryXs = caEntryPoints.map(p => p.centerX);
-      const minEntryX = Math.min(...allEntryXs);
-      const maxEntryX = Math.max(...allEntryXs);
-
-      const busbarAcY = caTop + 8; // Horizontal aggregation bar
-      const troncoX = minEntryX + (maxEntryX - minEntryX) / 2;
-      const breakerY = busbarAcY + 15;
-
-      // DPS deslocado para a direita, abrindo espaço para textos laterais do disjuntor
-      const dpsCaX = clampX(troncoX + 28);
-
-      // 1. DESENHO DA CAIXA TRACEJADA (Englobando o novo layout com DPS afastado)
-      const boxLeft = Math.max(2, minEntryX - 10);
-      const boxRight = clampX(dpsCaX + 10);
-      const boxTop = caTop + 2;
-      const boxBot = breakerY + 12;
-
-      ctx.save();
-      ctx.setLineDash([1, 1]);
-      ctx.strokeStyle = '#555';
-      ctx.lineWidth = 0.4;
-      ctx.strokeRect(boxLeft, boxTop, boxRight - boxLeft, boxBot - boxTop);
-      ctx.restore();
-      ctx.strokeStyle = '#000';
-
-      const isAnyMicro = blocks.some(b => b.inverter?.inverterType === 'micro');
-      const boxTitle = isAnyMicro ? 'QUADRO DE JUNÇÃO CA / TRUNK CABLE' : 'CAIXA DE CONEXÃO CA';
-      drawLabel(boxTitle, boxLeft + 2, boxTop + 4, { font: '2.2px Arial', bold: true, spec: true });
-
-      // 2. Barramento de Agrupamento Horizontal (Cabo Tronco Daisy-Chain para micros)
-      drawConnection({ x: minEntryX, y: busbarAcY }, { x: maxEntryX, y: busbarAcY }, { weight: LW_POWER });
-      if (isAnyMicro) {
-        drawLabel('Cabo Tronco CA (Daisy-Chain)', minEntryX + 2, busbarAcY - 2, { font: '1.8px Arial', spec: true });
+      // Proteção Integrada do Inversor (apenas 1 caixa se espaço permitir e apenas 1 inversor)
+      if (numInvs === 1 && colWidth >= 75) {
+        const badgeW = Math.min(colWidth - invW - 8, 68);
+        const badgeH = 12.0;
+        const badgeX = invX + invW + 4;
+        const badgeY = invY;
+        drawInverterProtectionsBadge(badgeX, badgeY, badgeW, badgeH);
       }
 
-      // Conecta todos os inversores a este barramento
-      caEntryPoints.forEach(({ centerX: cx, caEntryAnchor: entry }) => {
-        drawConnection(entry, { x: cx, y: busbarAcY }, { dot: 'end', weight: LW_POWER });
+      // Descida CA (saída direta do inversor desobstruída)
+      const caEntryAnchor: Anchor = { x: centerX, y: caTop + 8 };
+      drawConnection(invAnch.bottom!, caEntryAnchor, { dot: 'both' });
+      drawLabel(`C-CA-${bIdx + 1}: ${phasesLabel} ${blockCable.cableSimple} | ΔV: ${blockCable.voltageDrop}%`, centerX + 2.0, caTop + 4, { font: '1.5px Arial' });
+      caEntryPoints.push({ centerX, caEntryAnchor });
+    });
+
+    // ── ZONA QUADRO DE PROTEÇÃO CA (QDS / TRUNK CABLE) ──
+    if (caEntryPoints.length > 0) {
+      const allXs = caEntryPoints.map(p => p.centerX);
+      const minX = Math.min(...allXs);
+      const maxX = Math.max(...allXs);
+      const troncoX = minX + (maxX - minX) / 2;
+      const busbarAcY = caTop + 9;
+      const breakerY = busbarAcY + 13;
+
+      if (numInvs > 1) {
+        drawConnection({ x: minX, y: busbarAcY }, { x: maxX, y: busbarAcY }, { weight: LW_POWER });
+      }
+      caEntryPoints.forEach(p => {
+        drawConnection(p.caEntryAnchor, { x: p.centerX, y: busbarAcY }, { dot: 'end', weight: LW_POWER });
       });
 
-      // 3. Eixo Central (Tronco Vertical) descendo para o disjuntor
-      drawConnection({ x: troncoX, y: busbarAcY }, { x: troncoX, y: breakerY - 3 }, { dot: 'start', weight: LW_POWER });
+      drawConnection({ x: troncoX, y: busbarAcY }, { x: troncoX, y: breakerY - 3.0 }, { dot: 'start', weight: LW_POWER });
+      const poles = engResult.totalBreakerPolarity === 'Tripolar' ? 3 : 2;
+      const brkAnch = drawBreaker(troncoX, breakerY, poles);
 
-      // 4. Disjuntor de proteção geral — MESMO valor exibido no "Resumo de Engenharia > Proteção Geral"
-      const correctBreakerLabel = `${engResult.totalSuggestedBreaker}A ${engResult.totalBreakerPolarity}`;
-      const polesForDraw = engResult.totalBreakerPolarity === 'Tripolar' ? 3 : 2;
+      drawLabel(`DJ-SOLAR ${engResult.totalSuggestedBreaker}A (Curva C | Icn: 6 kA)`, troncoX + 5.0, breakerY - 1.2, { font: '1.9px Arial', bold: true });
+      drawLabel('Quadro de Proteção Solar (QDS)', troncoX + 5.0, breakerY + 1.8, { font: '1.7px Arial' });
 
-      const brkAnch = drawBreaker(troncoX, breakerY, polesForDraw);
+      const dpsCaX = maxX + 16;
+      drawConnection({ x: troncoX, y: busbarAcY + 3 }, { x: dpsCaX, y: busbarAcY + 3 }, { dot: 'start' });
+      drawConnection({ x: dpsCaX, y: busbarAcY + 3 }, { x: dpsCaX, y: breakerY });
+      drawDPS(dpsCaX, breakerY + 1, `DPS CA Classe II 275V (${phasesLabel})`);
 
-      // 5. Textos do disjuntor posicionados ABAIXO do símbolo, deslocados à direita para não cortar o fio vertical
-      const brkTextX = troncoX + 4;
-      const brkTitle = isAnyMicro ? 'DISJUNTOR RAMAL TRUNK' : 'DISJUNTOR PROTEÇÃO';
-      drawLabel(correctBreakerLabel, brkTextX, breakerY + 6, { align: 'left', font: '1.8px Arial', bold: true, spec: true });
-      drawLabel(brkTitle, brkTextX, breakerY + 10, { align: 'left', font: '1.8px Arial', spec: true });
-
-      // 6. Conecta o DPS lateralmente (agora mais afastado)
-      drawConnection({ x: troncoX, y: busbarAcY + 4 }, { x: dpsCaX, y: busbarAcY + 4 }, { dot: 'start' });
-      drawConnection({ x: dpsCaX, y: busbarAcY + 4 }, { x: dpsCaX, y: breakerY });
-      drawDPS(dpsCaX, breakerY + 1, sharedCable.dps);
-
-      // 7. Descida Direta e contínua para o Barramento Principal
       drawConnection(brkAnch.bottom!, { x: troncoX, y: mainBusY }, { dot: 'end', weight: LW_POWER });
-
-      // Guarda dados para desenhar especificações de cabo + símbolos APÓS o barramento principal
-      sharedTrunkData = { troncoX, sharedCable, sharedPhases };
     }
 
-    // ══════════════════════════════════════════════════════
-    // ── MAIN CA BUS (horizontal, fixed Y) ──
-    // ══════════════════════════════════════════════════════
-    const busStartX = 5;
-    const seloLeftBoundary = SELO_X - MARGEM_ESQUERDA;
-    const busEndX = Math.min(DRAW_W - 5, seloLeftBoundary - 3);
+    // ── ZONA BARRAMENTO PRINCIPAL & PADRÃO DE ENTRADA ──
+    const busStartX = 8;
+    const busEndX = dims.drawW - 6;
+    drawConnection({ x: busStartX, y: mainBusY }, { x: busEndX, y: mainBusY }, { weight: LW_POWER });
+    drawLabel('BARRAMENTO CA PRINCIPAL', busStartX, mainBusY - 2.5, { font: '2.2px Arial', bold: true });
 
-    const mainBusLeft: Anchor = { x: busStartX, y: mainBusY };
-    const mainBusRight: Anchor = { x: busEndX, y: mainBusY };
-    drawConnection(mainBusLeft, mainBusRight, { weight: LW_POWER });
-
-    drawLabel('BARRAMENTO CA PRINCIPAL', busStartX, mainBusY + 5, { font: '2px Arial', bold: true, spec: true });
-
-    // ── UC label centered on Main Bus (between trunk and grid entry) ──
-    if (sharedTrunkData) {
-      const { troncoX } = sharedTrunkData;
-      const gridNodeXPreview = busEndX - 55 + 15; // mirrors gridBoxLeft + 15 (mainBkX) below
-      const cableLabelX = troncoX + (gridNodeXPreview - troncoX) / 2;
-      drawLabel(`UC: ${projectData.client.utilityId}`, cableLabelX, mainBusY - 3, { align: 'center', font: '1.8px Arial', bold: true, spec: true });
-    }
-
-    // ══════════════════════════════════════════════════════
-    // ── GRID STANDARD (Padrão de Entrada) ──
-    // ══════════════════════════════════════════════════════
-    const gridBoxW = 55;
-    const gridBoxH = 38;
+    // Padrão de Entrada da Concessionária (Extremidade Direita com Espaço Garantido)
+    const gridBoxW = format === 'A3' ? 68 : 58;
     const gridBoxRight = busEndX;
     const gridBoxLeft = gridBoxRight - gridBoxW;
-    // 1. FUSÃO DE EIXOS: O Padrão de Entrada senta EXATAMENTE no Barramento Principal
-    const gridMidY = mainBusY;
-    const gridBoxTop = gridMidY - 15;
-    const gridBoxBot = gridBoxTop + gridBoxH;
+    const gridBoxTop = mainBusY - 16;
+    const gridBoxH = 34;
 
     ctx.save();
+    ctx.setLineDash([1.5, 1.5]);
+    ctx.strokeStyle = '#555555';
     ctx.lineWidth = LW_DETAIL;
-    ctx.setLineDash([1, 1]);
-    ctx.strokeStyle = '#555';
     ctx.strokeRect(gridBoxLeft, gridBoxTop, gridBoxW, gridBoxH);
     ctx.restore();
-    ctx.strokeStyle = '#000';
 
-    drawLabel('PADRÃO DE ENTRADA', gridBoxLeft + 2, gridBoxTop + 3, { font: '2.2px Arial', bold: true, spec: true });
+    drawLabel('PADRÃO DA CONCESSIONÁRIA', gridBoxLeft + 2.5, gridBoxTop + 3.2, { font: '1.9px Arial', bold: true });
+    drawLabel(`${networkDesc}`, gridBoxLeft + 2.5, gridBoxTop + 5.8, { font: '1.5px Arial' });
 
-    // Warning plate
-    const plateW = 25, plateH = 8;
-    const plateX = gridBoxLeft + 2;
-    const plateY = gridBoxTop + 7;
-    ctx.fillStyle = '#FFD700';
-    ctx.fillRect(plateX, plateY, plateW, plateH);
-    ctx.save();
-    ctx.lineWidth = LW_SYMBOL;
-    ctx.strokeRect(plateX, plateY, plateW, plateH);
-    ctx.restore();
-    ctx.fillStyle = '#000';
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 2.8px Arial';
-    ctx.fillText('CUIDADO', plateX + plateW / 2, plateY + 3.5);
-    ctx.font = 'bold 2.5px Arial';
-    ctx.fillText('GERAÇÃO PRÓPRIA', plateX + plateW / 2, plateY + 6.5);
-    ctx.textAlign = 'left';
+    // Placa de Advertência de Segurança NBR 16690 (Em posição isolada e dedicada sem encavalar)
+    const maxAcX = caEntryPoints.length > 0 ? Math.max(...caEntryPoints.map(p => p.centerX)) + 20 : 50;
+    const warnLeft = maxAcX + 6;
+    const warnW = Math.min(60, Math.max(48, gridBoxLeft - warnLeft - 6));
+    const warnX = Math.max(warnLeft, gridBoxLeft - warnW - 8);
+    drawWarningPlate(warnX, mainBusY - 18, warnW, 10.5);
 
-    // Main breaker — anchored. Labels reposicionados ABAIXO para evitar colisão com nós da linha.
-    const mainBkX = gridBoxLeft + 15;
-    const mainBrkAnch = drawBreaker(mainBkX, gridMidY, phases);
-    // Amperagem + polaridade ABAIXO do disjuntor
-    const gridPolarity = phases === 3 ? 'Tripolar' : phases === 2 ? 'Bipolar' : 'Monopolar';
-    drawLabel(`${projectData.technical.mainBreaker}A ${gridPolarity}`, mainBkX, gridMidY + 9, { align: 'center', font: '1.8px Arial', spec: true });
-    // Título do componente logo abaixo da amperagem
-    drawLabel('DISJUNTOR PADRÃO', mainBkX, gridMidY + 13, { align: 'center', font: '1.8px Arial', bold: true, spec: true });
+    // Disjuntor Geral Padrão
+    const mainBkX = gridBoxLeft + 14;
+    drawBreaker(mainBkX, mainBusY, phases);
+    drawLabel(`DJ-GERAL ${projectData.technical.mainBreaker}A`, mainBkX, mainBusY + 6.0, { align: 'center', font: '1.8px Arial', bold: true });
+    drawLabel(`(Curva C | Icn: 10 kA)`, mainBkX, mainBusY + 8.5, { align: 'center', font: '1.4px Arial' });
 
-    // Meter (enlarged)
-    const meterX = gridBoxLeft + 38;
-    const meterDiam = 10;
-    const meterRad = meterDiam / 2;
-    const meterAnchor: Anchor = { x: meterX, y: gridMidY };
+    // Medidor Bidirecional
+    const meterX = gridBoxLeft + 35;
+    const meterRad = 4.8;
     ctx.save();
     ctx.lineWidth = LW_SYMBOL;
     ctx.beginPath();
-    ctx.arc(meterX, gridMidY, meterRad, 0, 2 * Math.PI);
-    ctx.fillStyle = '#FFF';
+    ctx.arc(meterX, mainBusY, meterRad, 0, 2 * Math.PI);
+    ctx.fillStyle = '#FFFFFF';
     ctx.fill();
     ctx.stroke();
     ctx.restore();
-    ctx.fillStyle = '#000';
-    drawLabel('kWh', meterX, gridMidY + 0.8, { align: 'center', font: '2.5px Arial', bold: true, spec: true });
-    drawLabel('Medidor Bidirecional', meterX, gridMidY - meterRad - 2.5, { align: 'center', font: '2.5px Arial', spec: true });
 
-    // ── Continuous power path (LW_POWER, preto): Main Bus → Breaker → Meter → Grid ──
-    // FUSÃO: barramento e padrão estão no mesmo eixo Y, sem degraus verticais.
-    // Linha do barramento entra direto no disjuntor (horizontal contínua).
-    drawConnection({ x: gridBoxLeft, y: gridMidY }, { x: mainBrkAnch.top!.x, y: gridMidY }, { weight: LW_POWER });
+    drawLabel('kWh', meterX, mainBusY + 0.7, { align: 'center', bold: true, font: '2.1px Arial' });
+    drawLabel('Medidor Bidirecional', meterX, mainBusY - meterRad - 2.8, { align: 'center', font: '1.6px Arial', bold: true });
+    drawLabel(`(${projectData.technical.utility})`, meterX, mainBusY - meterRad - 0.8, { align: 'center', font: '1.4px Arial' });
 
-    // Breaker right → meter left (continuous horizontal)
-    const breakerRight: Anchor = { x: mainBrkAnch.bottom!.x + 8, y: gridMidY };
-    const meterLeft: Anchor = { x: meterX - meterRad, y: gridMidY };
-    drawConnection(breakerRight, meterLeft, { dot: 'both', weight: LW_POWER });
+    // Aterramento do Padrão
+    const gndX = gridBoxLeft + (format === 'A3' ? 52 : 47);
+    drawGround(gndX, mainBusY + 4);
+    drawLabel('Aterramento:', gndX, mainBusY + 11.0, { align: 'center', font: '1.4px Arial', bold: true });
+    drawLabel('Haste 5/8" x 2.40m', gndX, mainBusY + 13.0, { align: 'center', font: '1.3px Arial' });
+    drawLabel('Cabo Cu Nu 25mm²', gndX, mainBusY + 15.0, { align: 'center', font: '1.3px Arial' });
 
-    // ── Conexões de Potência (Linhas limpas, sem lixo) ──
-    // Garante a conexão física contínua do nó direito do medidor até a rede e a proteção
-    drawConnection({ x: meterX + meterRad, y: gridMidY }, { x: gridBoxRight, y: gridMidY }, { dot: 'start', weight: LW_POWER });
-    // Se o tronco da proteção estiver fora da caixa, estende a linha principal para soldá-los
-    const troncoXForWeld = sharedTrunkData?.troncoX;
-    if (troncoXForWeld !== undefined && troncoXForWeld > gridBoxRight) {
-      drawConnection({ x: gridBoxRight, y: gridMidY }, { x: troncoXForWeld, y: gridMidY }, { dot: 'end', weight: LW_POWER });
-    } else {
-      drawConnection({ x: gridBoxRight, y: gridMidY }, { x: gridBoxRight + 5, y: gridMidY }, { weight: LW_POWER });
-    }
-
-    // ── Rótulo Único do Cabo de Entrada (centralizado e blindado pelo Halo) ──
-    const gridCableX = meterX + meterRad + ((gridBoxRight - (meterX + meterRad)) / 2);
-    const gridCableSize = projectData.technical.mainBreaker > 50 ? '16' : '10';
-    const defaultCableSpec = `3#${gridCableSize}mm² + 1#${gridCableSize}mm²(T) 750V`;
-    drawLabel(defaultCableSpec, gridCableX, gridMidY - 3.5, { align: 'center', font: '1.8px Arial', spec: true });
-    drawWiringSymbols(gridCableX, gridMidY, phases);
-
-    // Grid/network triangle
-    const netX = clampX(gridBoxRight + 8);
+    // Seta da Rede Externa
+    const netX = gridBoxRight - 3;
     ctx.beginPath();
-    ctx.moveTo(netX, gridMidY);
-    ctx.lineTo(netX + 4, gridMidY - 3);
-    ctx.lineTo(netX + 4, gridMidY + 3);
+    ctx.moveTo(netX, mainBusY);
+    ctx.lineTo(netX + 3.0, mainBusY - 2.2);
+    ctx.lineTo(netX + 3.0, mainBusY + 2.2);
     ctx.closePath();
     ctx.fill();
 
-    drawLabel(`REDE ${projectData.technical.utility}`, netX + 6, gridMidY - 4, { font: '2.8px Arial', bold: true, spec: true });
-    drawLabel(`${projectData.technical.voltage}`, netX + 6, gridMidY - 7.5, { font: '2.5px Arial', spec: true });
+    drawLabel(`REDE ${projectData.technical.utility}`, netX - 3, mainBusY - 5.5, { align: 'right', font: '2.0px Arial', bold: true });
+    drawLabel(`${projectData.technical.voltage}`, netX - 3, mainBusY - 3.2, { align: 'right', font: '1.6px Arial' });
 
-    // Ground near grid box — connected to breaker, shifted left of selo
-    const groundX = clampX(Math.min(gridBoxLeft + 10, seloLeftBoundary - 8));
-    const groundY = gridBoxBot + 1;
-    if (groundY + 5 < DRAW_H - 2) {
-      const groundTop: Anchor = { x: groundX, y: gridMidY };
-      const groundBot: Anchor = { x: groundX, y: groundY };
-      drawConnection(groundTop, groundBot, { dot: 'start' });
-      drawGround(groundX, groundY);
+    ctx.restore();
+  }, [dims, projectData, format, DPI, viewMode]);
+
+  // ── Desenho da Tabela Técnica de Cargas (BOM) ──
+  const drawTechnicalTable = (
+    ctx: CanvasRenderingContext2D,
+    x: number, y: number, w: number, h: number,
+    data: ReturnType<typeof buildTechnicalTableData>
+  ) => {
+    ctx.save();
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = LW_FRAME;
+    ctx.strokeRect(x, y, w, h);
+
+    const headerH = format === 'A3' ? 6.5 : 5.5;
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(x, y, w, headerH);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = format === 'A3' ? 'bold 2.6px Arial' : 'bold 2.1px Arial';
+    ctx.fillText('QUADRO TÉCNICO DE EQUIPAMENTOS, CONDUTORES E PROTEÇÃO (DATA SCHEDULE / BOM)', x + 2.5, y + (headerH * 0.68));
+
+    const isTwoCol = w > 160;
+    const col1W = isTwoCol ? Math.round(w * 0.54) : w;
+    const col2X = isTwoCol ? x + col1W : x;
+
+    if (isTwoCol) {
+      ctx.strokeStyle = '#CBD5E1';
+      ctx.lineWidth = 0.25;
+      ctx.beginPath();
+      ctx.moveTo(col2X, y + headerH);
+      ctx.lineTo(col2X, y + h);
+      ctx.stroke();
     }
 
-    // ── PROTECTION SPECS TEXT ──
-    const specY = caTop - 18;
-    if (specY > ccBot + 5) {
-      drawLabel('Requisitos de Proteção do Inversor:', 2, specY, { font: '2.8px Arial', bold: true, spec: true });
-      const lh = 3.2;
+    ctx.fillStyle = '#000000';
+    const fontSize = format === 'A3' ? '1.8px Arial' : '1.5px Arial';
+    ctx.font = fontSize;
+    const rowGap = format === 'A3' ? 2.8 : 2.3;
+
+    if (isTwoCol) {
       const col1Lines = [
-        '(59) Sobretensão: Tensão de fase máx. 10% acima da nominal. Tempo ≤ 1,0s.',
-        '(27) Subtensão: Tensão de fase máx. 10% abaixo da nominal. Tempo ≤ 3,0s.',
+        ...data.modulesInfo,
+        ...data.invertersInfo,
+        ...data.cablesInfo,
       ];
+      let y1 = y + headerH + 2.8;
+      const maxRows1 = Math.floor((h - headerH - 1.5) / rowGap);
+      col1Lines.slice(0, maxRows1).forEach(line => {
+        ctx.fillText(`• ${line}`, x + 2, y1);
+        y1 += rowGap;
+      });
+
       const col2Lines = [
-        '(81O/U) Frequência: 59,5–60,5 Hz. Tempo ≤ 5,0s.',
-        '(25) Sincronismo: Δφ 10°, ΔV 0,05pu, Δf 0,1Hz. Tempo ≤ 0,2s.',
+        ...data.protectionsInfo,
+        ...data.ansiInfo,
       ];
-      col1Lines.forEach((l, i) => {
-        drawLabel(l, 2, specY + 4 + i * lh, { font: '2.5px Arial', spec: true });
+      let y2 = y + headerH + 2.8;
+      const maxRows2 = Math.floor((h - headerH - 1.5) / rowGap);
+      col2Lines.slice(0, maxRows2).forEach(line => {
+        ctx.fillText(`• ${line}`, col2X + 2, y2);
+        y2 += rowGap;
       });
-      col2Lines.forEach((l, i) => {
-        drawLabel(l, DRAW_W / 2, specY + 4 + i * lh, { font: '2.5px Arial', spec: true });
+    } else {
+      const allLines = [
+        ...data.modulesInfo,
+        ...data.invertersInfo,
+        ...data.cablesInfo.slice(0, 2),
+        ...data.protectionsInfo.slice(0, 2),
+        ...data.ansiInfo.slice(0, 1),
+      ];
+      let textY = y + headerH + 2.5;
+      const maxRows = Math.floor((h - headerH - 1.5) / rowGap);
+      allLines.slice(0, maxRows).forEach(line => {
+        ctx.fillText(`• ${line}`, x + 2, textY);
+        textY += rowGap;
       });
-      drawLabel('PADRÃO DE CORES NBR 5410: Fases: Preto/Branco/Vermelho | Neutro: Azul Claro | Terra: Verde/Verde-Amarelo', 2, specY + 4 + 3 * lh, { font: '2.5px Arial', bold: true, spec: true });
     }
 
     ctx.restore();
   };
 
-  const drawSelo = (ctx: CanvasRenderingContext2D, x: number, y: number, engResult: ReturnType<typeof getProjectEngineeringStatus>) => {
+  // ── Desenho do Selo Técnico ABNT ──
+  const drawSelo = (
+    ctx: CanvasRenderingContext2D,
+    x: number, y: number, w: number, h: number,
+    engResult: ReturnType<typeof getProjectEngineeringStatus>
+  ) => {
     ctx.save();
-    ctx.strokeStyle = '#000';
+    ctx.strokeStyle = '#000000';
     ctx.lineWidth = LW_FRAME;
-    ctx.strokeRect(x, y, SELO_W, SELO_H);
+    ctx.strokeRect(x, y, w, h);
 
-    const logoW = 28;
-    const infoW = 95;
-    ctx.beginPath(); ctx.moveTo(x + logoW, y); ctx.lineTo(x + logoW, y + SELO_H); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x + logoW + infoW, y); ctx.lineTo(x + logoW + infoW, y + SELO_H); ctx.stroke();
+    const logoW = format === 'A3' ? 26 : 22;
+    ctx.beginPath();
+    ctx.moveTo(x + logoW, y);
+    ctx.lineTo(x + logoW, y + h);
+    ctx.stroke();
 
-    ctx.font = 'bold 4px Arial';
+    ctx.font = format === 'A3' ? 'bold 3.6px Arial' : 'bold 3.0px Arial';
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#000';
-    ctx.fillText('SolarCAD', x + logoW / 2, y + SELO_H / 2 - 2);
-    ctx.font = '2px Arial';
-    ctx.fillText('Suite GD', x + logoW / 2, y + SELO_H / 2 + 2);
+    ctx.fillStyle = '#000000';
+    ctx.fillText('SolarCAD', x + logoW / 2, y + h / 2 - 2);
+    ctx.font = '1.8px Arial';
+    ctx.fillText('Suíte GD', x + logoW / 2, y + h / 2 + 2);
     ctx.textAlign = 'left';
 
-    const selopad = 1.5; // 1.5mm padding from borders
-    const ix = x + logoW + selopad;
-    let iy = y + selopad + 2;
-    const ilh = 3.2;
-    ctx.font = 'bold 2.5px Arial';
-    ctx.fillText('DIAGRAMA UNIFILAR - MICROGERAÇÃO FOTOVOLTAICA', ix, iy);
-    iy += ilh;
-    ctx.font = '2.2px Arial';
-    ctx.fillText(`CLIENTE: ${projectData.client.name.toUpperCase()}`, ix, iy);
-    iy += ilh;
-    const addr = projectData.client.address;
-    const addrText = `END.: ${addr.street}, ${addr.number} - ${addr.neighborhood} - ${addr.city}/${addr.state}`;
-    ctx.fillText(addrText.substring(0, 80), ix, iy);
-    iy += ilh;
-    ctx.fillText(`UC: ${projectData.client.utilityId} | Concessionária: ${projectData.technical.utility}`, ix, iy);
-    iy += ilh;
-    ctx.fillText(`Pot. CC: ${engResult.totalDcPower.toFixed(2)} kWp | Pot. CA: ${engResult.totalAcPower.toFixed(2)} kW`, ix, iy);
-    iy += ilh;
-    ctx.fillText(`Disj. Geral: ${engResult.totalSuggestedBreaker}A ${engResult.totalBreakerPolarity}`, ix, iy);
-    iy += ilh;
-    const blockDescriptions = projectData.equipmentBlocks.map((b, i) => `B${i + 1}: ${b.inverterQty}x ${b.inverterBrand} ${b.inverterModel} + ${b.moduleQty}x ${b.moduleBrand}`).join(' | ');
-    ctx.font = '1.8px Arial';
-    ctx.fillText(blockDescriptions.substring(0, 100), ix, iy);
+    const ix = x + logoW + 2.0;
+    let iy = y + (format === 'A3' ? 4.2 : 3.6);
+    const lh = format === 'A3' ? 3.6 : 3.0;
 
-    const rx = x + logoW + infoW + selopad;
-    let ry = y + selopad + 2;
-    const rlh = 3.2;
-    ctx.font = 'bold 2.2px Arial';
-    ctx.fillText('RESPONSÁVEL TÉCNICO', rx, ry);
-    ry += rlh;
-    ctx.font = '2.2px Arial';
-    ctx.fillText(`Eng. ${projectData.engineer?.name || 'N/A'}`, rx, ry);
-    ry += rlh;
-    ctx.fillText(`CREA: ${projectData.engineer?.crea || 'N/A'}`, rx, ry);
-    ry += rlh;
-    ctx.fillText(`ART: ${projectData.client?.art || 'N/A'}`, rx, ry);
-    ry += rlh * 1.5;
-    ctx.fillText(`Data: ${new Date().toLocaleDateString('pt-BR')}`, rx, ry);
-    ry += rlh;
-    ctx.fillText('Escala: Sem Escala (Dim. em mm)', rx, ry);
-    ry += rlh;
-    ctx.font = '1.8px Arial';
-    ctx.fillText('Folha: A4 Paisagem (297x210mm)', rx, ry);
+    const titlePrefix = viewMode === 'multifilar'
+      ? 'DIAGRAMA MULTIFILAR (NBR 5410)'
+      : viewMode === 'communication'
+      ? 'DIAGRAMA DE COMUNICAÇÃO & MODBUS RTU'
+      : 'DIAGRAMA UNIFILAR';
+
+    ctx.font = format === 'A3' ? 'bold 2.6px Arial' : 'bold 2.2px Arial';
+    ctx.fillText(`${titlePrefix} - GERAÇÃO DISTRIBUÍDA`, ix, iy);
+    iy += lh;
+
+    ctx.font = format === 'A3' ? '2.1px Arial' : '1.8px Arial';
+    ctx.fillText(`CLIENTE: ${projectData.client.name || 'Não informado'} | UC: ${projectData.client.utilityId || 'A definir'}`, ix, iy);
+    iy += lh;
+
+    ctx.fillText(`LOCAL: ${projectData.client.address?.city || ''} - ${projectData.client.address?.state || 'RJ'} | DISTR: ${projectData.technical.utility}`, ix, iy);
+    iy += lh;
+
+    ctx.fillText(`POT. CC: ${engResult.totalDcPower.toFixed(2)} kWp | POT. CA: ${engResult.totalAcPower.toFixed(2)} kW`, ix, iy);
+    iy += lh;
+
+    ctx.fillText(`RT: ${projectData.engineer?.name || 'Não informado'} (${projectData.engineer?.crea || 'CREA/CFT'}) | ART: ${projectData.client.art || 'Pendente'}`, ix, iy);
 
     ctx.restore();
   };
 
   useEffect(() => {
     drawDiagram();
-  }, [projectData]);
+  }, [drawDiagram]);
 
-  const handleDownloadPDF = () => {
+  const handleExportPDF = () => {
     try {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const pdf = new jsPDF({
+      const doc = new jsPDF({
         orientation: 'landscape',
         unit: 'mm',
-        format: [PAGE_W, PAGE_H],
-        compress: true,
+        format: format.toLowerCase() as any,
       });
-      pdf.setProperties({
-        title: `Diagrama Unifilar - ${projectData.client.name || 'Projeto'}`,
-        subject: `Microgeração FV - UC ${projectData.client.utilityId || ''}`,
-        author: projectData.engineer?.name || 'SolarCAD',
-        creator: 'SolarCAD - Suite GD',
-      });
-      const imgData = canvas.toDataURL('image/png', 1.0);
-      pdf.addImage(imgData, 'PNG', 0, 0, PAGE_W, PAGE_H, undefined, 'SLOW');
-      const filename = `Diagrama_${projectData.client.name.replace(/\s+/g, '_') || 'projeto'}.pdf`;
-      pdf.save(filename);
-      toast.success(`Laudo PDF (${filename}) exportado com sucesso!`);
-    } catch {
-      toast.error('Erro ao gerar diagrama PDF');
-    }
-  };
 
-  const [zoom, setZoom] = useState<number>(1.0);
-
-  const handleDownloadDXF = () => {
-    try {
-      const dxfContent = generateSolarUnifilarDxf(projectData);
-      const filename = `Diagrama_${projectData.client.name.replace(/\s+/g, '_') || 'projeto'}.dxf`;
-      downloadDxfFile(filename, dxfContent);
-      toast.success(`Arquivo CAD DXF (${filename}) exportado com sucesso!`);
-    } catch {
-      toast.error('Erro ao gerar arquivo DXF');
-    }
-  };
-
-  const handleDownloadPNG = () => {
-    try {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const link = document.createElement('a');
-      const filename = `Diagrama_${projectData.client.name.replace(/\s+/g, '_') || 'projeto'}.png`;
-      link.download = filename;
-      link.href = canvas.toDataURL('image/png', 1.0);
-      link.click();
-      toast.success(`Imagem PNG (${filename}) salva com sucesso!`);
-    } catch {
-      toast.error('Erro ao exportar imagem PNG');
+
+      const imgData = canvas.toDataURL('image/png', 1.0);
+      doc.addImage(imgData, 'PNG', 0, 0, dims.pageW, dims.pageH);
+
+      const clientName = (projectData.client.name || 'Cliente').replace(/\s+/g, '_');
+      doc.save(`${clientName}_Diagrama_${viewMode}_${format}.pdf`);
+      toast.success(`Diagrama ${viewMode} exportado com sucesso em Prancha ${format}!`);
+    } catch (err: any) {
+      toast.error(`Erro ao exportar PDF: ${err.message}`);
     }
+  };
+
+  const handleExportDXF = () => {
+    try {
+      const dxfContent = generateSolarUnifilarDxf(projectData, {
+        mode: viewMode === 'multifilar' ? 'multifilar' : 'unifilar',
+        showCommunication: viewMode === 'communication',
+      });
+      const clientName = (projectData.client.name || 'Cliente').replace(/\s+/g, '_');
+      downloadDxfFile(`${clientName}_Diagrama_${viewMode}_CAD.dxf`, dxfContent);
+      toast.success('Arquivo DXF gerado com AutoCAD Blocks e camadas dedicadas!');
+    } catch (err: any) {
+      toast.error(`Erro ao exportar DXF: ${err.message}`);
+    }
+  };
+
+  const handleFitToScreen = () => {
+    setFitMode(true);
+    setZoom(1);
+    toast.info('Visualização ajustada 100% à tela.');
   };
 
   return (
-    <div className="flex flex-col items-center w-full">
-      <div className="w-full flex flex-wrap justify-between items-center gap-2 mb-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-muted-foreground">Diagrama Unifilar Interativo</span>
-          <InfoTrigger helpKey="diagram" />
+    <div className="flex flex-col gap-3 w-full">
+      {/* ── BARRA SUPERIOR DE CONTROLES: SELEÇÃO DE MODOS DE DIAGRAMAÇÃO & PRANCHA ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 p-3 bg-muted/40 rounded-xl border border-border">
+        {/* Alternador de Modos CAD Avançados */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex gap-1 bg-background p-1 rounded-lg border border-input shadow-xs">
+            <button
+              onClick={() => setViewMode('unifilar')}
+              className={`px-3 py-1.5 text-xs rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                viewMode === 'unifilar'
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400" /> Modo Unifilar
+            </button>
+
+            <button
+              onClick={() => setViewMode('multifilar')}
+              className={`px-3 py-1.5 text-xs rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                viewMode === 'multifilar'
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+              }`}
+            >
+              <Split className="w-3.5 h-3.5 text-emerald-400" /> Modo Multifilar (NBR 5410)
+            </button>
+
+            <button
+              onClick={() => setViewMode('communication')}
+              className={`px-3 py-1.5 text-xs rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                viewMode === 'communication'
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+              }`}
+            >
+              <Radio className="w-3.5 h-3.5 text-purple-400" /> Comunicação & TC / Modbus
+            </button>
+
+            <button
+              onClick={() => setViewMode('roof_mapping')}
+              className={`px-3 py-1.5 text-xs rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                viewMode === 'roof_mapping'
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+              }`}
+            >
+              <Home className="w-3.5 h-3.5 text-cyan-400" /> Planta Telhado (String Mapping 2D)
+            </button>
+          </div>
         </div>
 
-        {/* Controles de Zoom & Ações de Exportação */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center bg-background border border-border rounded-lg p-0.5 shadow-sm">
+        {/* Controles de Prancha, Zoom e Exportação (Ativos nos Modos Esquemáticos) */}
+        {viewMode !== 'roof_mapping' && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex gap-1 bg-background p-1 rounded-md border border-input">
+              <button
+                onClick={() => { setFormat('A4'); setFitMode(true); }}
+                className={`px-2.5 py-1 text-xs rounded font-medium transition-all ${
+                  format === 'A4' ? 'bg-brand-600 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                A4 (297×210)
+              </button>
+              <button
+                onClick={() => { setFormat('A3'); setFitMode(true); }}
+                className={`px-2.5 py-1 text-xs rounded font-medium transition-all ${
+                  format === 'A3' ? 'bg-brand-600 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                A3 (420×297)
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1 border border-input rounded-md bg-background px-1">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="w-7 h-7"
+                onClick={() => { setFitMode(false); setZoom(z => Math.max(0.4, Number((z - 0.15).toFixed(2)))); }}
+                title="Zoom Out"
+              >
+                <ZoomOut className="w-3.5 h-3.5" />
+              </Button>
+              <span className="text-xs font-mono px-1 min-w-[50px] text-center">
+                {fitMode ? 'Ajustado' : `${Math.round(zoom * 100)}%`}
+              </span>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="w-7 h-7"
+                onClick={() => { setFitMode(false); setZoom(z => Math.min(3.0, Number((z + 0.15).toFixed(2)))); }}
+                title="Zoom In"
+              >
+                <ZoomIn className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[11px] gap-1 text-brand-500"
+                onClick={handleFitToScreen}
+                title="Ajustar 100% à Largura da Tela"
+              >
+                <Maximize2 className="w-3 h-3" /> Ajustar
+              </Button>
+            </div>
+
             <Button
-              variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => setZoom(z => Math.max(0.5, Math.round((z - 0.15) * 100) / 100))}
-              title="Diminuir Zoom"
+              onClick={handleExportPDF}
+              className="text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5 shadow-sm"
             >
-              <ZoomOut size={14} />
+              <FileText className="w-3.5 h-3.5" /> Exportar PDF
             </Button>
-            <span className="text-xs font-mono px-2 text-muted-foreground">{Math.round(zoom * 100)}%</span>
+
             <Button
-              variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => setZoom(z => Math.min(2.5, Math.round((z + 0.15) * 100) / 100))}
-              title="Aumentar Zoom"
+              variant="outline"
+              onClick={handleExportDXF}
+              className="text-xs border-brand-500/40 hover:bg-brand-500/10 text-brand-600 dark:text-brand-300 gap-1.5 shadow-sm"
             >
-              <ZoomIn size={14} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0 text-muted-foreground"
-              onClick={() => setZoom(1.0)}
-              title="Resetar Zoom"
-            >
-              <RotateCcw size={12} />
+              <Download className="w-3.5 h-3.5 text-brand-500" /> Exportar DXF (AutoCAD Blocks)
             </Button>
           </div>
-
-          <Button variant="outline" size="sm" onClick={handleDownloadDXF} className="gap-1.5 border-emerald-600/40 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40" title="Exportar para AutoCAD (DXF R12/R2000)">
-            <FileText size={15} /> Exportar DXF
-          </Button>
-
-          <Button variant="outline" size="sm" onClick={handleDownloadPNG} className="gap-1.5">
-            <Image size={15} /> Baixar PNG
-          </Button>
-
-          <Button size="sm" onClick={handleDownloadPDF} className="gap-1.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-            <Download size={15} /> Baixar PDF
-          </Button>
-        </div>
+        )}
       </div>
 
-      <div className="w-full overflow-auto bg-muted p-4 rounded-lg border border-border flex justify-center min-h-[420px]">
-        <div 
-          className="transition-transform duration-150 origin-top flex justify-center items-center"
-          style={{ transform: `scale(${zoom})` }}
+      {/* ── ÁREA PRINCIPAL: CANVAS CAD OU PLANTA DE TELHADO ── */}
+      {viewMode === 'roof_mapping' ? (
+        <StringRoofMapping projectData={projectData} />
+      ) : (
+        <div
+          ref={containerRef}
+          className="w-full overflow-auto bg-slate-900/70 p-3 md:p-6 rounded-xl border border-border flex justify-center items-start min-h-[500px] max-h-[82vh]"
         >
-          <canvas
-            ref={canvasRef}
-            className="bg-white shadow-xl max-w-full h-auto rounded"
-            style={{ maxHeight: '600px', imageRendering: 'crisp-edges' }}
-          />
+          <div
+            className="shadow-2xl rounded-lg border border-slate-700 bg-white transition-all overflow-hidden flex-shrink-0"
+            style={{
+              width: fitMode ? '100%' : `${Math.round((format === 'A3' ? 1400 : 1050) * zoom)}px`,
+              minWidth: fitMode ? 'auto' : `${Math.round((format === 'A3' ? 1400 : 1050) * zoom)}px`,
+              maxWidth: fitMode ? '100%' : 'none',
+              aspectRatio: `${dims.pageW} / ${dims.pageH}`,
+            }}
+          >
+            <canvas
+              ref={canvasRef}
+              className="w-full h-full block rounded-lg bg-white"
+              style={{
+                display: 'block',
+                width: '100%',
+                height: '100%',
+              }}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
-
