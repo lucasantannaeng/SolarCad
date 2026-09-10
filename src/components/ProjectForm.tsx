@@ -424,7 +424,7 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
       </section>
 
       {/* Utility */}
-      <section className="bg-card p-6 rounded-lg shadow-sm border border-border">
+      <section className="bg-card p-3.5 sm:p-6 rounded-xl shadow-sm border border-border">
         <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
           <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
             <Zap className="w-5 h-5 text-brand-500" />
@@ -471,7 +471,7 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
       </section>
 
       {/* Client */}
-      <section className="bg-card p-6 rounded-lg shadow-sm border border-border">
+      <section className="bg-card p-3.5 sm:p-6 rounded-xl shadow-sm border border-border">
         <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
           <Users className="w-5 h-5 text-brand-500" />
           Dados do Cliente / Titular da UC
@@ -536,7 +536,7 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
       </section>
 
       {/* Installation Address / Site Location */}
-      <section className="bg-card p-6 rounded-lg shadow-sm border border-border space-y-4">
+      <section className="bg-card p-3.5 sm:p-6 rounded-xl shadow-sm border border-border space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
             <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
@@ -729,7 +729,7 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
       </section>
 
       {/* Engineer */}
-      <section className="bg-card p-6 rounded-lg shadow-sm border border-border">
+      <section className="bg-card p-3.5 sm:p-6 rounded-xl shadow-sm border border-border">
         <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
           <h2 className="text-lg font-semibold text-foreground">Responsável Técnico & Empresa Integradora</h2>
           <Button
@@ -757,7 +757,7 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
       </section>
 
       {/* Technical */}
-      <section className="bg-card p-6 rounded-lg shadow-sm border border-border">
+      <section className="bg-card p-3.5 sm:p-6 rounded-xl shadow-sm border border-border">
         <h2 className="text-lg font-semibold text-foreground mb-4">Dados Técnicos da Instalação</h2>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
@@ -790,7 +790,7 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
       </section>
 
       {/* Equipment Blocks */}
-      <section className="bg-card p-6 rounded-lg shadow-sm border border-border">
+      <section className="bg-card p-3.5 sm:p-6 rounded-xl shadow-sm border border-border">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
             Equipamentos e Strings
@@ -864,7 +864,7 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
       </section>
 
       {/* Credit Distribution (Lei 14.300 / ANEEL) */}
-      <section className="bg-card p-6 rounded-lg shadow-sm border border-border">
+      <section className="bg-card p-3.5 sm:p-6 rounded-xl shadow-sm border border-border">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div>
             <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
@@ -1141,7 +1141,7 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
       </section>
 
       {/* AI Justification */}
-      <section className="bg-card p-6 rounded-lg shadow-sm border border-border">
+      <section className="bg-card p-3.5 sm:p-6 rounded-xl shadow-sm border border-border">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-brand-500" />
@@ -1168,26 +1168,26 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
       </section>
 
       {/* Actions */}
-      <div className="flex justify-end items-center gap-3 pt-4 flex-wrap">
+      <div className="flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-2.5 sm:gap-3 pt-4">
         <Button
           type="button"
           onClick={() => setArtGuideOpen(true)}
           variant="outline"
-          className="border-amber-500/40 hover:bg-amber-500/10 text-amber-700 dark:text-amber-300 font-bold px-4 py-2.5 shadow-sm text-sm flex items-center gap-2"
+          className="w-full sm:w-auto border-amber-500/40 hover:bg-amber-500/10 text-amber-700 dark:text-amber-300 font-bold px-3.5 py-2.5 shadow-sm text-xs sm:text-sm flex items-center justify-center gap-2"
           title="Guia Rápido de Preenchimento de ART (CREA) e TRT (CFT)"
         >
-          <Award size={18} className="text-amber-500" />
-          📋 Guia ART / TRT (CREA & CFT)
+          <Award size={16} className="text-amber-500" />
+          📋 Guia ART / TRT
         </Button>
 
         <Button
           type="button"
           onClick={() => setPreFlightOpen(true)}
           variant="outline"
-          className="border-blue-500/40 hover:bg-blue-500/10 text-blue-700 dark:text-blue-300 font-bold px-4 py-2.5 shadow-sm text-sm flex items-center gap-2"
+          className="w-full sm:w-auto border-blue-500/40 hover:bg-blue-500/10 text-blue-700 dark:text-blue-300 font-bold px-3.5 py-2.5 shadow-sm text-xs sm:text-sm flex items-center justify-center gap-2"
           title="Auditoria Técnica Pré-Protocolo (Checklist Anti-Exigência)"
         >
-          <ShieldCheck size={18} className="text-blue-500" />
+          <ShieldCheck size={16} className="text-blue-500" />
           🛡️ Auditoria Pré-Protocolo
         </Button>
 
@@ -1195,11 +1195,11 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
           type="button"
           onClick={handleGenerateUtilityAccessForm}
           variant="outline"
-          className="border-brand-500/40 hover:bg-brand-500/10 text-brand-700 dark:text-brand-300 font-bold px-4 py-2.5 shadow-sm text-sm flex items-center gap-2"
+          className="w-full sm:w-auto border-brand-500/40 hover:bg-brand-500/10 text-brand-700 dark:text-brand-300 font-bold px-3.5 py-2.5 shadow-sm text-xs sm:text-sm flex items-center justify-center gap-2"
           title={`Gera o formulário oficial de solicitação de acesso para ${getUtilityShortLabel(data.technical.utility)}`}
         >
-          <FileSpreadsheet size={18} className="text-brand-500" />
-          📄 Formulário de Acesso ({getUtilityShortLabel(data.technical.utility)})
+          <FileSpreadsheet size={16} className="text-brand-500" />
+          📄 Formulário {getUtilityShortLabel(data.technical.utility)}
         </Button>
 
         <button
@@ -1214,9 +1214,9 @@ export const ProjectForm: React.FC<Props> = ({ data, onChange, onGenerate, modul
               onGenerate();
             }
           }}
-          className="flex items-center gap-2 px-6 py-3 rounded-md font-bold shadow-lg transition-all bg-primary text-primary-foreground hover:bg-brand-700 hover:shadow-xl"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-md font-bold shadow-lg transition-all bg-primary text-primary-foreground hover:bg-brand-700 hover:shadow-xl text-xs sm:text-sm"
         >
-          <FileText size={20} />
+          <FileText size={18} />
           Gerar Memorial Descritivo (PDF)
         </button>
       </div>

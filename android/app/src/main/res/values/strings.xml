@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SolarCAD</string>
+    <string name="title_activity_main">SolarCAD</string>
+    <string name="package_name">com.autorais.solarcad</string>
+    <string name="custom_url_scheme">com.autorais.solarcad</string>
+</resources>

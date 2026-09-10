@@ -70,6 +70,8 @@ credentials.json
 service-account*.json
 
 # Desktop Application Compilations & Builds (Electron / Tauri / PyInstaller)
+!electron/
+!electron/**
 release/
 release_builds/
 dist-electron/
@@ -123,3 +125,16 @@ pnpm-debug.log*
 *.7z
 *.tar.gz
 *.rar
+
+# Android Build Outputs & Caches
+android/app/build/
+android/.gradle/
+android/build/
+android/local.properties
+android/captures/
+.externalNativeBuild/
+.cxx/
+
+# Local developer setup scripts
+setup_android_tools.ps1
+

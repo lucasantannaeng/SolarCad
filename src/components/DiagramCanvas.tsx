@@ -818,79 +818,79 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
   return (
     <div className="flex flex-col gap-3 w-full">
       {/* ── BARRA SUPERIOR DE CONTROLES: SELEÇÃO DE MODOS DE DIAGRAMAÇÃO & PRANCHA ── */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 p-3 bg-muted/40 rounded-xl border border-border">
-        {/* Alternador de Modos CAD Avançados */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <div className="flex gap-1 bg-background p-1 rounded-lg border border-input shadow-xs">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 p-2.5 sm:p-3 bg-muted/40 rounded-xl border border-border">
+        {/* Alternador de Modos CAD Avançados com Scroll Horizontal no Mobile */}
+        <div className="overflow-x-auto pb-1 md:pb-0 scrollbar-none -mx-1 px-1">
+          <div className="flex gap-1 bg-background p-1 rounded-lg border border-input shadow-xs shrink-0 whitespace-nowrap">
             <button
               onClick={() => setViewMode('unifilar')}
-              className={`px-3 py-1.5 text-xs rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+              className={`px-2.5 sm:px-3 py-1.5 text-xs rounded-md font-semibold transition-all flex items-center gap-1.5 shrink-0 ${
                 viewMode === 'unifilar'
                   ? 'bg-brand-600 text-white shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
               }`}
             >
-              <Zap className="w-3.5 h-3.5 text-amber-400" /> Modo Unifilar
+              <Zap className="w-3.5 h-3.5 text-amber-400" /> Unifilar
             </button>
 
             <button
               onClick={() => setViewMode('multifilar')}
-              className={`px-3 py-1.5 text-xs rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+              className={`px-2.5 sm:px-3 py-1.5 text-xs rounded-md font-semibold transition-all flex items-center gap-1.5 shrink-0 ${
                 viewMode === 'multifilar'
                   ? 'bg-brand-600 text-white shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
               }`}
             >
-              <Split className="w-3.5 h-3.5 text-emerald-400" /> Modo Multifilar (NBR 5410)
+              <Split className="w-3.5 h-3.5 text-emerald-400" /> Multifilar (NBR 5410)
             </button>
 
             <button
               onClick={() => setViewMode('communication')}
-              className={`px-3 py-1.5 text-xs rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+              className={`px-2.5 sm:px-3 py-1.5 text-xs rounded-md font-semibold transition-all flex items-center gap-1.5 shrink-0 ${
                 viewMode === 'communication'
                   ? 'bg-brand-600 text-white shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
               }`}
             >
-              <Radio className="w-3.5 h-3.5 text-purple-400" /> Comunicação & TC / Modbus
+              <Radio className="w-3.5 h-3.5 text-purple-400" /> Comunicação & TC
             </button>
 
             <button
               onClick={() => setViewMode('roof_mapping')}
-              className={`px-3 py-1.5 text-xs rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+              className={`px-2.5 sm:px-3 py-1.5 text-xs rounded-md font-semibold transition-all flex items-center gap-1.5 shrink-0 ${
                 viewMode === 'roof_mapping'
                   ? 'bg-brand-600 text-white shadow-sm'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
               }`}
             >
-              <Home className="w-3.5 h-3.5 text-cyan-400" /> Planta Telhado (String Mapping 2D)
+              <Home className="w-3.5 h-3.5 text-cyan-400" /> Planta Telhado 2D
             </button>
           </div>
         </div>
 
         {/* Controles de Prancha, Zoom e Exportação (Ativos nos Modos Esquemáticos) */}
         {viewMode !== 'roof_mapping' && (
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-between md:justify-end">
             <div className="flex gap-1 bg-background p-1 rounded-md border border-input">
               <button
                 onClick={() => { setFormat('A4'); setFitMode(true); }}
-                className={`px-2.5 py-1 text-xs rounded font-medium transition-all ${
+                className={`px-2 sm:px-2.5 py-1 text-xs rounded font-medium transition-all ${
                   format === 'A4' ? 'bg-brand-600 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                A4 (297×210)
+                A4
               </button>
               <button
                 onClick={() => { setFormat('A3'); setFitMode(true); }}
-                className={`px-2.5 py-1 text-xs rounded font-medium transition-all ${
+                className={`px-2 sm:px-2.5 py-1 text-xs rounded font-medium transition-all ${
                   format === 'A3' ? 'bg-brand-600 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                A3 (420×297)
+                A3
               </button>
             </div>
 
-            <div className="flex items-center gap-1 border border-input rounded-md bg-background px-1">
+            <div className="flex items-center gap-0.5 border border-input rounded-md bg-background px-1">
               <Button
                 size="icon"
                 variant="ghost"
@@ -900,7 +900,7 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
               >
                 <ZoomOut className="w-3.5 h-3.5" />
               </Button>
-              <span className="text-xs font-mono px-1 min-w-[50px] text-center">
+              <span className="text-[11px] font-mono px-1 min-w-[44px] text-center">
                 {fitMode ? 'Ajustado' : `${Math.round(zoom * 100)}%`}
               </span>
               <Button
@@ -915,30 +915,33 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-7 px-2 text-[11px] gap-1 text-brand-500"
+                className="h-7 px-1.5 text-[11px] gap-1 text-brand-500"
                 onClick={handleFitToScreen}
                 title="Ajustar 100% à Largura da Tela"
               >
-                <Maximize2 className="w-3 h-3" /> Ajustar
+                <Maximize2 className="w-3 h-3" />
               </Button>
             </div>
 
-            <Button
-              size="sm"
-              onClick={handleExportPDF}
-              className="text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5 shadow-sm"
-            >
-              <FileText className="w-3.5 h-3.5" /> Exportar PDF
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                onClick={handleExportPDF}
+                className="text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1 shadow-sm px-2.5 h-8"
+              >
+                <FileText className="w-3.5 h-3.5" /> PDF
+              </Button>
 
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleExportDXF}
-              className="text-xs border-brand-500/40 hover:bg-brand-500/10 text-brand-600 dark:text-brand-300 gap-1.5 shadow-sm"
-            >
-              <Download className="w-3.5 h-3.5 text-brand-500" /> Exportar DXF (AutoCAD Blocks)
-            </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleExportDXF}
+                className="text-xs border-brand-500/40 hover:bg-brand-500/10 text-brand-600 dark:text-brand-300 gap-1 shadow-sm px-2.5 h-8"
+                title="Exportar DXF para AutoCAD"
+              >
+                <Download className="w-3.5 h-3.5 text-brand-500" /> DXF
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -949,7 +952,7 @@ export const DiagramCanvas: React.FC<Props> = ({ projectData }) => {
       ) : (
         <div
           ref={containerRef}
-          className="w-full overflow-auto bg-slate-900/70 p-3 md:p-6 rounded-xl border border-border flex justify-center items-start min-h-[500px] max-h-[82vh]"
+          className="w-full overflow-auto bg-slate-900/70 p-2 sm:p-4 md:p-6 rounded-xl border border-border flex justify-center items-start min-h-[350px] md:min-h-[500px] max-h-[82vh]"
         >
           <div
             className="shadow-2xl rounded-lg border border-slate-700 bg-white transition-all overflow-hidden flex-shrink-0"

@@ -5,6 +5,7 @@
   "author": "Luca Rodrigues Gomes de Sant'Anna <lucasantannaeng@gmail.com>",
   "license": "MIT",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -14,9 +15,16 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "electron:dev": "vite",
-    "electron:build": "vite build && electron-builder --win"
+    "electron:build": "vite build && electron-builder --win",
+    "android:sync": "vite build && cap sync android",
+    "android:build": "vite build && cap sync android && cd android && build_apk.bat assembleDebug"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
+    "@capacitor/cli": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
@@ -105,6 +113,9 @@
     "appId": "com.solarcad.desktop",
     "productName": "SolarCAD",
     "artifactName": "${productName}-v${version}.${ext}",
+    "extraMetadata": {
+      "main": "electron/main.cjs"
+    },
     "npmRebuild": false,
     "nodeGypRebuild": false,
     "directories": {

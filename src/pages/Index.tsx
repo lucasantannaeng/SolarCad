@@ -10,12 +10,14 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
 import { supabase } from '@/integrations/supabase/client';
 import { SavedProjects } from '@/components/SavedProjects';
-import { Sun, LayoutDashboard, Archive, Save, Loader2, LogOut, Database, FolderOpen, Settings, Building2 } from 'lucide-react';
+import { Sun, LayoutDashboard, Archive, Save, Loader2, LogOut, Database, FolderOpen, Settings, Building2, Menu, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ConfigModal } from '@/components/ConfigModal';
 import { CompanyProfileModal } from '@/components/CompanyProfileModal';
 import { useCompanyProfile } from '@/hooks/useCompanyProfile';
+
+const isMobileApp = typeof window !== 'undefined' && Boolean((window as any).Capacitor?.isNativePlatform());
 
 const createDefaultBlock = (id: number, module = DEFAULT_MODULE, inverter = DEFAULT_INVERTER): EquipmentBlock => ({
   id,
@@ -56,10 +58,13 @@ const Index = () => {
   const [saving, setSaving] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [companyModalOpen, setCompanyModalOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { modules, inverters, loading } = useEquipment();
   const { profile: companyProfile } = useCompanyProfile();
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdmin();
+
+  const appTitle = isMobileApp ? 'SolarCAD Mobile v1.3.0' : 'SolarCAD Desktop v1.3.0';
 
   // Injeta perfil da empresa e responsável técnico no projeto atual se ainda não preenchido
   useEffect(() => {
@@ -145,8 +150,21 @@ const Index = () => {
       };
 
       const { error } = await supabase.from('projects').insert(payload);
-      if (error) throw error;
-      toast.success('Projeto salvo com sucesso!');
+      if (error) {
+        console.warn('Erro ao salvar no Supabase, salvando em cache offline:', error);
+        const localList = JSON.parse(localStorage.getItem('solarcad_offline_projects') || '[]');
+        const localItem = {
+          ...payload,
+          id: `offline-${Date.now()}`,
+          created_at: new Date().toISOString(),
+          _isOffline: true,
+        };
+        localStorage.setItem('solarcad_offline_projects', JSON.stringify([localItem, ...localList]));
+        toast.warning('Sem conexão com o Supabase. Projeto salvo como rascunho offline no dispositivo!');
+        return;
+      }
+
+      toast.success('Projeto salvo com sucesso na nuvem (Supabase)!');
     } catch (err: any) {
       console.error('Save draft error:', err);
       toast.error('Erro ao salvar projeto. Tente novamente.');
@@ -167,8 +185,141 @@ const Index = () => {
   }
 
   return (
-    <div className="h-screen w-screen bg-background flex flex-col md:flex-row overflow-hidden">
-      <aside className="w-full md:w-64 md:h-screen md:sticky md:top-0 bg-brand-900 text-brand-100 flex flex-col justify-between flex-shrink-0 z-20 shadow-xl border-r border-brand-800/80">
+    <div className="h-screen w-screen bg-background flex flex-col md:flex-row overflow-hidden select-none md:select-auto">
+      {/* Mobile Top Header (with Safe Area Inset) */}
+      <header className="md:hidden pt-safe bg-brand-900 text-brand-100 px-4 py-2.5 flex items-center justify-between border-b border-brand-800 shadow-sm z-30 flex-shrink-0">
+        <div className="flex items-center gap-2.5">
+          <Sun className="w-6 h-6 text-accent animate-pulse flex-shrink-0" />
+          <div className="leading-tight">
+            <h1 className="font-bold text-base text-white tracking-tight">SolarCAD</h1>
+            <span className="text-[10px] text-brand-200 block font-medium">
+              {activeTab === 'form' ? 'Dados do Projeto' : activeTab === 'diagram' ? 'Diagrama Unifilar' : 'Projetos Salvos'}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={saveDraft}
+            disabled={saving}
+            className="p-2 text-brand-200 hover:text-white hover:bg-brand-800/70 rounded-lg transition-colors disabled:opacity-50"
+            title="Salvar Projeto"
+          >
+            {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+          </button>
+          <button
+            onClick={() => setMobileMenuOpen(prev => !prev)}
+            className="p-2 text-brand-200 hover:text-white hover:bg-brand-800/70 rounded-lg transition-colors"
+            title="Abrir Menu"
+            aria-label="Abrir Menu"
+          >
+            {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+      </header>
+
+      {/* Mobile Offcanvas Drawer */}
+      {mobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <aside className="relative w-4/5 max-w-xs bg-brand-900 text-brand-100 h-full flex flex-col justify-between shadow-2xl z-50 pt-safe pb-safe border-r border-brand-800 animate-in slide-in-from-left duration-200">
+            <div className="flex flex-col flex-1 overflow-y-auto">
+              <div className="p-4 flex items-center justify-between border-b border-brand-800 bg-brand-950/20">
+                <div className="flex items-center gap-2.5">
+                  <Sun className="w-7 h-7 text-accent animate-pulse" />
+                  <div>
+                    <h2 className="font-bold text-base text-white">SolarCAD</h2>
+                    <span className="text-[10px] text-brand-200 font-medium">Homologação GD • v1.3.0</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-1.5 text-brand-200 hover:text-white hover:bg-brand-800 rounded-lg"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <nav className="p-3 space-y-1.5 flex-1">
+                <button
+                  onClick={() => { setActiveTab('form'); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg transition-colors font-medium text-sm ${
+                    activeTab === 'form' ? 'bg-brand-800 text-white font-semibold shadow-sm' : 'text-brand-200 hover:bg-brand-800/70'
+                  }`}
+                >
+                  <LayoutDashboard size={18} /> Novo Projeto
+                </button>
+                <button
+                  onClick={() => { setActiveTab('diagram'); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg transition-colors font-medium text-sm ${
+                    activeTab === 'diagram' ? 'bg-brand-800 text-white font-semibold shadow-sm' : 'text-brand-200 hover:bg-brand-800/70'
+                  }`}
+                >
+                  <Archive size={18} /> Diagrama Unifilar
+                </button>
+                <button
+                  onClick={() => { setActiveTab('projects'); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg transition-colors font-medium text-sm ${
+                    activeTab === 'projects' ? 'bg-brand-800 text-white font-semibold shadow-sm' : 'text-brand-200 hover:bg-brand-800/70'
+                  }`}
+                >
+                  <FolderOpen size={18} /> Projetos Salvos
+                </button>
+                <button
+                  onClick={() => { setMobileMenuOpen(false); saveDraft(); }}
+                  disabled={saving}
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-brand-200 hover:bg-brand-800/70 rounded-lg transition-colors disabled:opacity-50 font-medium text-sm"
+                >
+                  {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                  Salvar Projeto
+                </button>
+                <div className="pt-2 my-2 border-t border-brand-800/60" />
+                <button
+                  onClick={() => { setCompanyModalOpen(true); setMobileMenuOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-brand-200 hover:bg-brand-800/70 rounded-lg transition-colors font-medium text-sm"
+                >
+                  <Building2 size={18} /> Empresa & Procurador
+                </button>
+                <button
+                  onClick={() => { setConfigOpen(true); setMobileMenuOpen(false); }}
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-brand-200 hover:bg-brand-800/70 rounded-lg transition-colors font-medium text-sm"
+                >
+                  <Settings size={18} /> Conexão & IA
+                </button>
+                {isAdmin && (
+                  <Link
+                    to="/admin"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="w-full flex items-center gap-3 px-3.5 py-2.5 text-brand-200 hover:bg-brand-800/70 rounded-lg transition-colors font-medium text-sm"
+                  >
+                    <Database size={18} /> Gerenciamento
+                  </Link>
+                )}
+              </nav>
+            </div>
+            <div className="p-3.5 space-y-2 border-t border-brand-800/80 bg-brand-950/40">
+              {user && (
+                <div className="text-xs text-brand-200 truncate text-center font-mono py-1 px-2 rounded bg-brand-900/50" title={user.email}>
+                  {user.email}
+                </div>
+              )}
+              <button
+                onClick={() => { setMobileMenuOpen(false); signOut(); }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-brand-200 hover:bg-brand-800 hover:text-white rounded-lg transition-colors"
+              >
+                <LogOut size={14} /> Sair
+              </button>
+              <div className="text-[10px] text-brand-300/60 text-center font-mono pt-1">
+                {appTitle}
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* Desktop Persistent Sidebar */}
+      <aside className="hidden md:flex md:w-64 md:h-screen md:sticky md:top-0 bg-brand-900 text-brand-100 flex-col justify-between flex-shrink-0 z-20 shadow-xl border-r border-brand-800/80">
         <div className="flex flex-col flex-1 overflow-y-auto">
           <div className="p-5 flex items-center gap-3 border-b border-brand-800/80 bg-brand-950/20">
             <Sun className="w-8 h-8 text-accent animate-pulse" />
@@ -214,18 +365,19 @@ const Index = () => {
             <LogOut size={14} /> Sair
           </button>
           <div className="text-[10px] text-brand-300/50 text-center font-mono pt-1">
-            SolarCAD Desktop v1.3.0
+            {appTitle}
           </div>
         </div>
       </aside>
 
-      <main className="flex-1 h-screen overflow-y-auto flex flex-col bg-background">
-        <header className="bg-card shadow-sm border-b border-border p-6 flex items-center justify-between">
+      {/* Main Content Workspace */}
+      <main className="flex-1 h-full overflow-y-auto flex flex-col bg-background pb-safe md:pb-6">
+        <header className="hidden md:flex bg-card shadow-sm border-b border-border p-6 items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-foreground">
               {activeTab === 'form' ? 'Dados do Projeto' : activeTab === 'diagram' ? 'Diagrama Unifilar' : 'Projetos Salvos'}
             </h2>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               {activeTab === 'form' ? 'Preencha os dados e adicione múltiplos conjuntos de inversores.' : activeTab === 'diagram' ? 'Diagrama com múltiplos inversores e barramento CA.' : 'Gerencie e carregue seus projetos salvos.'}
             </p>
           </div>
@@ -246,11 +398,12 @@ const Index = () => {
             </button>
           </div>
         </header>
-        <div className={activeTab === 'diagram' ? "p-4 md:p-6 w-full max-w-[1600px] mx-auto" : "p-6 max-w-6xl mx-auto"}>
+
+        <div className={activeTab === 'diagram' ? "p-3 sm:p-4 md:p-6 w-full max-w-[1600px] mx-auto flex-1" : "p-3 sm:p-4 md:p-6 max-w-6xl mx-auto flex-1 w-full"}>
           {activeTab === 'form' ? (
             <ProjectForm data={projectData} onChange={setProjectData} onGenerate={() => generateMemorialPDF(projectData)} modules={modules} inverters={inverters} />
           ) : activeTab === 'diagram' ? (
-            <div className="bg-card p-4 md:p-6 rounded-lg shadow border border-border">
+            <div className="bg-card p-3 sm:p-4 md:p-6 rounded-lg shadow border border-border">
               <DiagramCanvas projectData={projectData} onProjectChange={setProjectData} />
             </div>
           ) : (
