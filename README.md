@@ -18,6 +18,10 @@
 
 > **Enterprise-grade Computer-Aided Design (CAD) & Sizing Suite for Solar PV Single-Line Diagrams (SLD), regulatory compliance (NBR 5410 & NBR 16690), automated Utility Access Forms (ENEL, LIGHT, CERCI, ENERGISA), Marco Legal da GD (Lei 14.300) rateio generation, and AutoCAD DXF / PDF export.**
 
+<br />
+
+<img src="assets/og-image.png" alt="SolarCad Hero Banner & Overview" width="100%" />
+
 </div>
 
 ---
@@ -36,7 +40,7 @@ In Brazilian solar photovoltaic contracting and distributed generation (GD) grid
 
 ---
 
-## 🚀 Capabilities & Interactive Demonstrations
+## 📸 Application Showcase & Interactive Demonstrations
 
 ### 1. Multi-Mode Interactive CAD Canvas (`DiagramCanvas.tsx`)
 
@@ -63,20 +67,35 @@ The vector CAD workspace delivers instant, interactive pan & zoom (40% to 300%) 
 
 ### 2. Multi-Utility Grid Access Suite (Homologação GD)
 
-SolarCad maps project parameters directly to official distributor submission templates, automating the preparation of all required regulatory documents:
+SolarCad maps project parameters directly to official distributor submission templates, generating standardized PDF forms without manual transcription errors:
 
-| Distributor | Standard / Norm | Automated Regulatory Output |
-| :--- | :--- | :--- |
-| **Light S.A.** | RECON-BT | Anexo A (Microgeração), Memorial Descritivo, Diagrama Unifilar |
-| **Enel Distribuição RJ** | CNC-GD | Formulário de Solicitação de Acesso GD, Planilha Oficial de Rateio (.xlsm) |
-| **Energisa Minas-Rio** | NDU-013 | Formulário de Solicitação de Acesso e Memorial de Proteções |
-| **CERCI** | Padrão Cooperativo | Requerimento Técnico e Estudo de Carga Rural |
+<div align="center">
+
+| Light S.A. (RECON-BT) | Enel Distribuição RJ (CNC-GD) |
+| :---: | :---: |
+| <img src="assets/generateLightFormPDF.png" alt="Light Access Form (Template Modelo Vazio)" width="450" /> | <img src="assets/generateEnelAccessFormPDF.png" alt="Enel Access Form (Template Modelo Vazio)" width="450" /> |
+| *Anexo Técnico de Microgeração BT (RECON-BT)* | *Formulário Oficial de Solicitação de Acesso GD* |
+
+| Energisa (NDU-013) | CERCI Cooperativa |
+| :---: | :---: |
+| <img src="assets/generateEnergisaFormPDF.png" alt="Energisa Access Form (Template Modelo Vazio)" width="450" /> | <img src="assets/generateCerciFormPDF.png" alt="CERCI Access Form (Template Modelo Vazio)" width="450" /> |
+| *Norma de Distribuição Unificada NDU-013* | *Formulário de Homologação Rural e Regional* |
+
+</div>
 
 ---
 
 ### 3. Marco Legal da GD (Lei 14.300/2022) & Rateio de Créditos
 
 The system integrates an automated credit allocation matrix, calculating remote self-consumption (*autoconsumo remoto*) and shared generation credits (*geração compartilhada*) across beneficiary consumer units (UCs):
+
+<div align="center">
+
+<img src="assets/generateCreditMatrixPDF.png" alt="Credit Allocation Matrix (Template Modelo Vazio)" width="600" />
+
+*Matriz Executiva de Rateio entre UCs Beneficiárias (Layout Oficial Lei 14.300/2022)*
+
+</div>
 
 * **Fio B Progressive Phase-in Engine:** Computes tariff impacts according to ANEEL regulations:
   * 2023: 15% | 2024: 30% | 2025: 45% | **2026: 60%** | 2027: 75% | 2028: 90% | 2029+: 100%.
@@ -86,7 +105,15 @@ The system integrates an automated credit allocation matrix, calculating remote 
 
 ### 4. Executive Legal & Commercial Documentation
 
-Generates tailored, single-page Powers of Attorney (*Procuração Específica*) and commercial proposals compliant with **REN ANEEL 1.000/2021**:
+Eliminates back-and-forth delays with notary public requirements by automatically generating tailored, single-page Powers of Attorney (*Procuração Específica*) and commercial contracts compliant with **REN ANEEL 1.000/2021**:
+
+<div align="center">
+
+<img src="assets/procuracao-uma-folha.png" alt="Executive Single-Page Power of Attorney (Template Modelo Vazio)" width="600" />
+
+*Procuração Específica em Folha Única com Alíneas de Representação Desobstruídas (Template Modelo do Motor)*
+
+</div>
 
 * **Unobstructed Signature Space:** Strict layout protection guaranteeing that signee fields are never orphaned across page breaks.
 * **Scope-Specific Powers:** Pre-drafted clauses for distributor access request, technical inspection attendance, meter replacement, and administrative appeals.
@@ -130,6 +157,17 @@ $$V_{mp,min} = V_{mp,STC} \cdot \left[1 + \frac{\gamma_{Pmp}}{100} \cdot (T_{max
 | **Cloud & Database** | Supabase (PostgreSQL 15+, Row-Level Security, Edge Functions) |
 | **AI OCR & Validation** | Google Gemini (Multimodal Energy Bill OCR & Datasheet Analysis) |
 | **Testing & Quality** | Vitest (325 Automated Unit & Regression Tests), TypeScript (`tsc --noEmit`) |
+
+---
+
+## 📋 Supported Energy Distributors (Concessionárias)
+
+| Distributor | Coverage Area | Regulatory Standard | Automated Forms & Deliverables |
+| :--- | :--- | :--- | :--- |
+| **Light S.A.** | Rio de Janeiro / Baixada | RECON-BT | Anexo A (Microgeração), Memorial Descritivo, Diagrama Unifilar |
+| **Enel Distribuição RJ** | Niterói, Região dos Lagos, Norte | CNC-GD | Formulário de Acesso GD, Planilha de Rateio Oficial (.xlsm) |
+| **Energisa Minas-Rio** | Interior RJ / Zona da Mata MG | NDU-013 | Formulário de Solicitação de Acesso e Memorial de Proteções |
+| **CERCI** | Região Serrana & Cooperativas | Padrão Cooperativo | Requerimento Técnico e Estudo de Carga Rural |
 
 ---
 
