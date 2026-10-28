@@ -40,6 +40,20 @@ In Brazilian solar photovoltaic contracting and distributed generation (GD) grid
 
 ---
 
+## 🎬 Product Tour & Demonstration Video (50s)
+
+<div align="center">
+
+https://github.com/lucasantannaeng/SolarCad/raw/main/assets/solarcad-demonstration.mp4
+
+<br />
+
+*Demonstração executiva do fluxo de trabalho no SolarCad Suite v1.3.9: do dimensionamento fotovoltaico determinístico NBR 16690 e CAD vetorial à geração automática de formulários oficiais das distribuidoras (Light, Enel, Energisa, CERCI) e exportação AutoCAD DXF.*
+
+</div>
+
+---
+
 ## 📸 Application Showcase & Interactive Demonstrations
 
 ### 1. Multi-Mode Interactive CAD Canvas (`DiagramCanvas.tsx`)
